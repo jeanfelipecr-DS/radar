@@ -1,0 +1,13 @@
+# segredos — nunca sobem (token do Supabase, chave de serviço)
+.env
+.env.*
+*.key
+*.pem
+secrets*
+
+# saída do modo seco (regerável rodando o coletor)
+saida/
+
+__pycache__/
+*.pyc
+.venv/
