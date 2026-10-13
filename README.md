@@ -20,18 +20,21 @@ pg_cron no banco (de hora em hora, minuto 17)
 
 O agendamento mora no banco porque o agendador do GitHub Actions é "best-effort": no repositório novo ele perdeu os primeiros horários sem rodar nenhuma vez. A primeira versão do coletor (Python + GitHub Actions) está no histórico do git.
 
-**Tela** (parte 2): <https://jeanfelipecr-ds.github.io/radar/> — login por link no e-mail (cadastro fechado: só o dono entra), vagas abertas que aceitam Brasil ranqueadas pela nota de **encaixe** (0–100), separadas por tempo até o primeiro dinheiro (dias · semanas · meses) e um bloco à parte com vagas de tempo integral, só para ler o mercado.
+**Tela:** <https://jeanfelipecr-ds.github.io/radar/>. O Radar é do Jean e de alguns amigos, por convite: o cadastro é fechado. O Jean entra por link no e-mail; os amigos entram com e-mail e senha, criados pela tela Convidar, que só o Jean vê. Cada pessoa vê as vagas abertas que aceitam Brasil, ranqueadas pela nota de **encaixe** (0–100) com o **próprio** perfil, separadas por tempo até o primeiro dinheiro (dias · semanas · meses), mais um bloco à parte com vagas de tempo integral, só para ler o mercado.
 
-A nota de encaixe mora no banco, não no código: `perfil_termo` guarda os termos da stack com peso, e a view `vaga_radar` soma o peso dobrado quando o termo aparece no título, o peso inteiro na área ou nas habilidades e metade quando ele aparece só na descrição. Mudou a stack? Muda uma linha da tabela e o ranking se recalcula na próxima leitura.
+**Configurar:** cada pessoa edita as próprias habilidades (peso 1 ou ½), as áreas que esconde, um valor mínimo opcional em US$ e a senha. Perfil novo nasce de um modelo pronto (**Dados** ou **Vídeo**). Desenho e decisões em [`docs/SDD_multiusuario.md`](docs/SDD_multiusuario.md).
 
-A chave que aparece no `index.html` é a pública (papel `anon`). Ela sozinha não lê nada: as regras de acesso (RLS) só liberam os dados para o login do dono.
+A nota de encaixe mora no banco, não no código. `perfil_termo` guarda os termos de cada pessoa com peso, e a view `vaga_radar` soma o peso dobrado quando o termo aparece no título, o peso inteiro na área ou nas habilidades e metade quando ele aparece só na descrição. A view é `security_invoker`: lê o perfil de quem está logado. Mudou a stack? Muda uma linha e o ranking se recalcula na próxima leitura.
 
-**Fontes automáticas** (testadas em 11/10/2026):
+A chave que aparece no `index.html` é a pública (papel `anon`). Ela sozinha não lê nada: as regras de acesso (RLS) liberam as vagas só para convidados e cada perfil só para o dono.
+
+**Fontes automáticas** (testadas em 11 e 13/10/2026):
 
 | Fonte | Como lê | Observação |
 |---|---|---|
 | Mercor | JSON embutido na página pública `/explore` | toda vaga passa por entrevista em vídeo com IA, falada em inglês |
 | Braintrust | API pública paginada | a maioria das vagas é restrita a EUA ou a uma lista de países |
+| Freelancer.com | API pública (`projects/active`), uma busca por habilidade distinta de todos os perfis | busca por palavra é solta: quem separa o relevante é a nota de cada perfil; valor convertido para US$ com a cotação do próprio projeto |
 
 Upwork, Malt, Outlier, Toptal e outras não entregam vagas de forma automática; entram como link e registro manual da candidatura.
 

@@ -113,7 +113,67 @@ async function braintrust(): Promise<Par[]> {
   return saida;
 }
 
-const FONTES: Record<string, () => Promise<Par[]>> = { mercor, braintrust };
+// ------------------------------------------------------------------ Freelancer.com
+// API pública. A busca é por PALAVRA e é solta ("premiere pro" já trouxe "migrar Xero"): por isso
+// busca com as habilidades de TODOS os perfis e deixa a nota de encaixe de cada pessoa separar o
+// que importa. Orçamento vem em várias moedas, com a cotação para US$ no próprio projeto.
+// Projeto por hora com 30h+/semana segue a regra da Braintrust → bloco de mercado.
+const POR_BUSCA = 25;
+const EM_PARALELO = 4;
+
+// O JSON da Freelancer é quase todo campo nulo (~7 KB/projeto). Guardar sem os nulos não perde
+// informação e faz a fonte caber no plano grátis.
+function semNulos(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(semNulos);
+  if (v && typeof v === "object") {
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>)
+      .filter(([, x]) => x !== null).map(([k, x]) => [k, semNulos(x)]));
+  }
+  return v;
+}
+
+async function freelancer(): Promise<Par[]> {
+  const { data, error } = await sb.from("perfil_termo").select("rotulo").eq("tipo", "encaixe");
+  if (error) throw error;
+  const buscas = [...new Set((data ?? []).map((r) => String(r.rotulo).trim()).filter(Boolean))];
+  const porId = new Map<number, Record<string, unknown>>();
+  for (let i = 0; i < buscas.length; i += EM_PARALELO) {
+    const lote = buscas.slice(i, i + EM_PARALELO).map((termo) => http(
+      `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${encodeURIComponent(termo)}` +
+      `&limit=${POR_BUSCA}&job_details=true&full_description=true`));
+    for (const texto of await Promise.all(lote)) {
+      for (const p of JSON.parse(texto).result?.projects ?? []) porId.set(p.id, p);
+    }
+  }
+  return [...porId.values()].filter((p) => !p.local).map((p) => {
+    const moeda = p.currency as { exchange_rate?: number } | undefined;
+    const taxa = Number(moeda?.exchange_rate) || null;
+    const usd = (v: unknown) => v === null || v === undefined || !taxa ? null : Math.round(Number(v) * taxa * 100) / 100;
+    const orc = (p.budget ?? {}) as { minimum?: number; maximum?: number };
+    const porHora = p.type === "hourly";
+    const comp = (p.hourly_project_info as { commitment?: { hours?: number; interval?: string } } | undefined)?.commitment;
+    const horas = porHora && comp?.interval === "week" ? comp.hours ?? null : null;
+    const jobs = (p.jobs ?? []) as { name?: string; category?: { name?: string } }[];
+    return [semNulos(p) as Record<string, unknown>, {
+      fonte: "freelancer", id_externo: String(p.id), titulo: p.title, empresa: null,
+      url: `https://www.freelancer.com/projects/${p.seo_url}`,
+      descricao: p.description ?? p.preview_description ?? null,
+      area: jobs[0]?.category?.name ?? null,
+      habilidades: jobs.map((j) => j.name).filter(Boolean),
+      compromisso: p.type,
+      tipo: (horas ?? 0) >= HORAS_INTEGRAL ? "integral" : "freela",
+      prazo: "semanas",
+      valor_min: usd(orc.minimum), valor_max: usd(orc.maximum),
+      unidade: porHora ? "hora" : "projeto",
+      horas_semana: horas,
+      entrevista_falada: null,
+      aceita_brasil: true,          // projeto não-local da Freelancer é aberto a qualquer país
+      publicada_em: p.time_submitted ? new Date(Number(p.time_submitted) * 1000).toISOString() : null,
+    }];
+  });
+}
+
+const FONTES: Record<string, () => Promise<Par[]>> = { mercor, braintrust, freelancer };
 
 // ------------------------------------------------------------------ versão bruta
 // Contadores que mudam a toda hora sem a vaga mudar ficam FORA do hash — senão cada coleta
@@ -122,6 +182,7 @@ const VOLATEIS: Record<string, Set<string>> = {
   mercor: new Set(["recentCandidatesCount", "remainingSlots", "suppliedSlots", "matchQuality", "searchSimilarityScore",
     "userSimilarityScore", "isMostRecent", "isRecommended", "applicationStepsCompleted", "applicationStepsPending", "submittedOn"]),
   braintrust: new Set(["openings_left"]),
+  freelancer: new Set(["bid_stats", "time_updated", "time_free_bids_expire"]),
 };
 
 // Mesmo texto que o json.dumps(sort_keys=True, ensure_ascii=False) do coletor Python antigo:
