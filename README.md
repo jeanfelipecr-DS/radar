@@ -18,6 +18,12 @@ GitHub Actions (de hora em hora)
              └─ vaga_aberta  view: "aberta" é calculado, nunca gravado
 ```
 
+**Tela** (parte 2): <https://jeanfelipecr-ds.github.io/radar/> — login por link no e-mail (cadastro fechado: só o dono entra), vagas abertas que aceitam Brasil ranqueadas pela nota de **encaixe** (0–100), separadas por tempo até o primeiro dinheiro (dias · semanas · meses) e um bloco à parte com vagas de tempo integral, só para ler o mercado.
+
+A nota de encaixe mora no banco, não no código: `perfil_termo` guarda os termos da stack com peso, e a view `vaga_radar` soma o peso dobrado quando o termo aparece no título, o peso inteiro na área ou nas habilidades e metade quando ele aparece só na descrição. Mudou a stack? Muda uma linha da tabela e o ranking se recalcula na próxima leitura.
+
+A chave que aparece no `index.html` é a pública (papel `anon`). Ela sozinha não lê nada: as regras de acesso (RLS) só liberam os dados para o login do dono.
+
 **Fontes automáticas** (testadas em 11/10/2026):
 
 | Fonte | Como lê | Observação |
