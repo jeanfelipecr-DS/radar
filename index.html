@@ -10,7 +10,8 @@
 <link rel="apple-touch-icon" href="https://jeanfelipecr-ds.github.io/marca/apple-touch-icon.png">
 <link rel="stylesheet" href="https://jeanfelipecr-ds.github.io/marca/tokens.css">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<!-- supabase-js servido do próprio site: o Edge bloqueia o armazenamento de scripts vindos de CDN de terceiros e a sessão não se fixa -->
+<script src="vendor/supabase-js-2.45.4.min.js"></script>
 <style>
   :root { color-scheme: dark; --borda: rgba(237,231,218,.09); --borda2: rgba(237,231,218,.16); }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -106,7 +107,9 @@
 */
 const SUPABASE_URL = "https://kagwnqkhatulpswqigzm.supabase.co";
 const CHAVE_PUBLICA = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZ3ducWtoYXR1bHBzd3FpZ3ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTc2NTIsImV4cCI6MjA5NzYzMzY1Mn0.mz0oERNhhta2Z7d2icoNXrYsdtrZSki3CZEZu9vHc78";
-const sb = supabase.createClient(SUPABASE_URL, CHAVE_PUBLICA);
+// Trava do login: a padrão (navigator.locks) ficava esperando para sempre e as consultas nunca voltavam.
+// Com um usuário só, rodar direto é seguro — a supabase-js já evita renovar o token duas vezes na mesma aba.
+const sb = supabase.createClient(SUPABASE_URL, CHAVE_PUBLICA, { auth: { lock: async (nome, espera, fn) => await fn() } });
 
 const PRAZOS = [
   { id: "dias",    titulo: "DIAS",    sub: "treino e avaliação de IA — sem cliente, sem proposta" },
@@ -257,7 +260,7 @@ async function abrirDetalhe(el) {
 app.addEventListener("click", async e => {
   const b = e.target.closest("[data-acao]"); if (!b) return;
   const acao = b.dataset.acao;
-  if (acao === "sair") { await sb.auth.signOut(); iniciando = null; telaLogin(); return; }
+  if (acao === "sair") { await sb.auth.signOut(); return; }   // o aviso SIGNED_OUT leva para o login
   if (acao === "bloco") {
     const id = b.closest(".bloco").dataset.bloco;
     estado.abertos = estado.abertos.includes(id) ? estado.abertos.filter(x => x !== id) : [...estado.abertos, id];
@@ -271,15 +274,21 @@ app.addEventListener("click", async e => {
   }
 });
 
-let iniciando = null;   // o link do e-mail dispara SIGNED_IN e a carga inicial ao mesmo tempo: carrega uma vez só
-function iniciar() { return iniciando ??= (async () => {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) { telaLogin(); return; }
+/*
+  Sessão: tudo parte do aviso onAuthStateChange, que já entrega a sessão.
+  Armadilha da supabase-js: chamar funções do auth (ex.: pegar a sessão) de dentro desse aviso
+  trava a fila interna do login — a página ficava parada em "Carregando…" depois do link do e-mail.
+  Por isso: a sessão vem do próprio aviso, e o trabalho sai dele via setTimeout(…, 0).
+*/
+let sessaoCarregada = null;
+async function aoMudarSessao(evento, sessao) {
+  if (!sessao) { sessaoCarregada = null; telaLogin(); return; }
+  if (sessaoCarregada === sessao.user.id) return;        // SIGNED_IN e INITIAL_SESSION chegam juntos: carrega uma vez
+  sessaoCarregada = sessao.user.id;
   try { await carregar(); render(); }
-  catch (err) { app.innerHTML = `<div class="carregando erro">Não consegui ler as vagas: ${esc(err.message)}</div>`; }
-})(); }
-sb.auth.onAuthStateChange((evento) => { if (evento === "SIGNED_IN") { iniciando = null; iniciar(); } });
-iniciar();
+  catch (err) { sessaoCarregada = null; app.innerHTML = `<div class="carregando erro">Não consegui ler as vagas: ${esc(err.message)}</div>`; }
+}
+sb.auth.onAuthStateChange((evento, sessao) => { setTimeout(() => aoMudarSessao(evento, sessao), 0); });
 </script>
 </body>
 </html>
