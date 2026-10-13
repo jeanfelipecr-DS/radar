@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Radar</title>
-<meta name="description" content="Radar — vagas de freela ranqueadas pelo que cada um sabe entregar.">
+<meta name="description" content="Radar: vagas de freela ranqueadas pelo que cada um sabe entregar.">
 <meta name="theme-color" content="#0A0A0A">
 <link rel="icon" href="https://jeanfelipecr-ds.github.io/marca/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://jeanfelipecr-ds.github.io/marca/apple-touch-icon.png">
@@ -13,119 +13,196 @@
 <!-- supabase-js servido do próprio site: o Edge bloqueia o armazenamento de scripts vindos de CDN de terceiros e a sessão não se fixa -->
 <script src="vendor/supabase-js-2.45.4.min.js"></script>
 <style>
-  :root { color-scheme: dark; --borda: rgba(237,231,218,.09); --borda2: rgba(237,231,218,.16); }
+  :root {
+    color-scheme: dark;
+    --fundo: #0A0A0A; --painel: #100F0D; --sel: #17150F; --linha: #24211B; --linha2: #3A342A;
+    --texto: var(--jfc-texto); --forte: var(--jfc-texto-forte); --suave: var(--jfc-texto-suave);
+    --ouro: var(--jfc-ouro); --ouro-claro: var(--jfc-ouro-claro); --ouro-medio: var(--jfc-ouro-medio);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { min-height: 100vh; background: radial-gradient(90% 60% at 20% 0%, #15130F 0%, #0B0A09 55%, #050505 100%) fixed, #0A0A0A;
-         color: var(--jfc-texto); font: 15px/1.5 var(--jfc-fonte); -webkit-font-smoothing: antialiased; }
+  html, body { background: var(--fundo); }
+  body { color: var(--texto); font: 15px/1.5 var(--jfc-fonte); -webkit-font-smoothing: antialiased; }
   button, input, select { font: inherit; color: inherit; }
-  button { background: none; border: 0; cursor: pointer; }
+  button { background: none; border: 0; cursor: pointer; text-align: left; }
   a { color: inherit; }
-  .app { max-width: 560px; margin: 0 auto; padding: 18px 16px 60px; }
-  .rotulo { font-size: 10.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--jfc-texto-suave); }
-  .traco { display: inline-block; width: 28px; height: 3px; background: var(--jfc-ouro); vertical-align: middle; margin-right: 10px; }
+  :focus-visible { outline: 2px solid var(--ouro); outline-offset: 2px; }
+  .erro { color: var(--jfc-alerta); }
+  .carregando { padding: 64px 16px; text-align: center; color: var(--suave); }
 
-  /* topo */
-  .topo { display: flex; align-items: center; gap: 12px; padding: 4px 0 18px; }
-  .topo img { height: 34px; }
-  .topo .marca b { display: block; font-weight: 600; font-size: 16px; letter-spacing: .34em; color: var(--jfc-texto-forte); }
-  .topo .marca small { font-size: 11.5px; color: var(--jfc-texto-suave); }
+  /* ---------------------------------------------------------------- topo */
+  .topo { display: flex; align-items: center; gap: 12px; padding: 14px 16px 10px; }
+  .topo img { height: 30px; flex: none; }
+  .topo .marca b { display: block; font-weight: 600; font-size: 15px; letter-spacing: .34em; color: var(--forte); line-height: 1.2; }
+  .topo .marca small { font-size: 12px; color: var(--suave); }
   .topo .marca small.atrasada { color: var(--jfc-atencao); }
-  .topo .acoes { margin-left: auto; display: flex; gap: 6px; }
-  .topo .acoes button { font-size: 12px; color: var(--jfc-texto-suave); border: 1px solid var(--borda2); border-radius: 8px; padding: 6px 10px; }
+  .topo .acoes { margin-left: auto; display: flex; gap: 4px; }
+  .topo .acoes button { font-size: 13px; color: var(--suave); padding: 8px 10px; border-radius: 8px; }
+  .topo .acoes button:hover { color: var(--forte); background: #15130F; }
 
-  /* 3 números */
-  .numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 22px; }
-  .num { background: rgba(237,231,218,.03); border: 1px solid var(--borda); border-radius: 14px; padding: 12px 12px 11px; }
-  .num .v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--jfc-texto-forte); line-height: 1.1; }
-  .num .v.ouro { background: var(--jfc-ouro-metal); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .num .l { font-size: 11px; color: var(--jfc-texto-suave); margin-top: 4px; line-height: 1.3; }
-  .num.breve .v { color: #4A453D; }
-  .nota-min { font-size: 12px; color: var(--jfc-texto-suave); margin: -12px 0 18px; }
+  /* ---------------------------------------------------------------- abas e filtros */
+  .abas { display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--linha); }
+  .abas::-webkit-scrollbar { display: none; }
+  .aba { flex: none; display: flex; align-items: baseline; gap: 7px; padding: 12px 10px 11px; font-size: 15px; font-weight: 500; color: var(--suave);
+         border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .aba small { font-size: 13px; font-weight: 600; color: #6F6A60; font-variant-numeric: tabular-nums; }
+  .aba[aria-selected="true"] { color: var(--forte); border-bottom-color: var(--ouro); }
+  .aba[aria-selected="true"] small { color: var(--ouro-claro); }
+  .aba:hover { color: var(--forte); }
+  .barra { padding: 12px 16px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; border-bottom: 1px solid var(--linha); }
+  .barra .ajuda { flex: 1 1 100%; font-size: 13px; color: var(--suave); }
+  .seg { display: inline-flex; align-items: center; border: 1px solid var(--linha2); border-radius: 9px; padding: 2px; }
+  .seg > span { font-size: 12.5px; color: var(--suave); padding: 0 8px 0 9px; }
+  .seg .curto { display: none; }
+  .seg button { font-size: 13px; padding: 5px 11px; border-radius: 7px; color: var(--suave); }
+  .seg button[aria-pressed="true"] { background: #221F18; color: var(--forte); font-weight: 600; }
+  .barra .resumo { font-size: 12.5px; color: var(--suave); margin-left: auto; }
+  .barra .resumo b { color: var(--ouro-claro); font-weight: 600; }
 
-  /* blocos */
-  .bloco { border: 1px solid var(--borda); border-radius: 16px; margin-bottom: 12px; background: rgba(18,17,16,.6); overflow: hidden; }
-  .bloco > button { width: 100%; text-align: left; display: flex; align-items: center; gap: 12px; padding: 16px; }
-  .bloco .t { flex: 1; }
-  .bloco .t b { display: block; font-size: 15px; font-weight: 600; color: var(--jfc-texto-forte); letter-spacing: .04em; }
-  .bloco .t span { font-size: 12px; color: var(--jfc-texto-suave); }
-  .bloco .qtd { font-size: 22px; font-weight: 700; color: var(--jfc-ouro-claro); }
-  .bloco .seta { color: var(--jfc-texto-suave); transition: transform .2s; }
-  .bloco.aberto .seta { transform: rotate(90deg); }
-  .bloco .lista { display: none; border-top: 1px solid var(--borda); }
-  .bloco.aberto .lista { display: block; }
-  .bloco.mercado { opacity: .78; }
-  .bloco.mercado .qtd { color: var(--jfc-texto-suave); }
-  .vazio { padding: 14px 16px 16px; font-size: 13px; color: var(--jfc-texto-suave); }
-  .mais { width: 100%; padding: 12px 16px; font-size: 12.5px; color: var(--jfc-texto-suave); border-top: 1px solid var(--borda); text-align: left; }
+  /* ---------------------------------------------------------------- anel de encaixe (a assinatura do Radar) */
+  .anel { position: relative; flex: none; width: 40px; height: 40px; display: grid; place-items: center; }
+  .anel svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .anel .trilho { fill: none; stroke: var(--linha); stroke-width: 3; }
+  .anel .arco { fill: none; stroke-width: 3; stroke-linecap: round; stroke: #5A5245; }
+  .anel.alto .arco { stroke: url(#radar-ouro); }
+  .anel.medio .arco { stroke: var(--ouro-medio); }
+  .anel.zero .arco { display: none; }
+  .anel b { position: relative; font-size: 12.5px; letter-spacing: -.04em; font-weight: 700; color: var(--suave); font-variant-numeric: tabular-nums; }
+  .anel.alto b { color: var(--ouro-claro); }
+  .anel.medio b { color: var(--texto); }
+  .anel.grande { width: 84px; height: 84px; }
+  .anel.grande b { font-size: 26px; letter-spacing: -.03em; }
+  .anel.grande .arco { animation: encher .7s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes encher { from { stroke-dasharray: 0 100; } }
 
-  /* vaga */
-  .vaga { border-top: 1px solid var(--borda); }
-  .vaga:first-child { border-top: 0; }
-  .vaga > button { width: 100%; text-align: left; display: flex; gap: 12px; padding: 13px 16px; align-items: flex-start; }
-  .nota { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px;
-          border: 2px solid #3A342A; color: var(--jfc-texto-suave); }
-  .nota.n50 { border-color: var(--jfc-ouro-medio); color: var(--jfc-ouro-claro); }
-  .nota.n75 { border: 0; background: var(--jfc-ouro-metal); color: #0A0A0A; }
-  .vaga .corpo { flex: 1; min-width: 0; }
-  .vaga h3 { font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--jfc-texto-forte); }
-  .vaga .meta { font-size: 12.5px; color: var(--jfc-texto-suave); margin-top: 3px; }
-  .vaga .meta b { color: var(--jfc-ouro-claro); font-weight: 600; }
-  .etiquetas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
-  .etq { font-size: 11px; font-weight: 500; padding: 3px 8px; border-radius: 999px; border: 1px solid var(--borda2); color: #CFC9BE; }
-  .etq.fala { border-color: rgba(212,175,55,.45); color: var(--jfc-ouro-claro); }
-  .etq.nova { background: rgba(212,175,55,.14); border-color: transparent; color: var(--jfc-ouro-claro); }
-  .detalhe { display: none; padding: 0 16px 16px 70px; }
-  .vaga.aberta .detalhe { display: block; }
-  .detalhe .termos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .detalhe .termos span { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: rgba(212,175,55,.10); color: var(--jfc-ouro-claro); }
-  .detalhe p { font-size: 13px; color: #CFC9BE; margin-bottom: 8px; white-space: pre-line; }
-  .detalhe .pouco { font-size: 12px; color: var(--jfc-texto-suave); white-space: normal; }
-  .botoes { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; text-decoration: none; border: 1px solid var(--borda2); }
+  /* ---------------------------------------------------------------- lista */
+  .linha-vaga { width: 100%; display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-bottom: 1px solid var(--linha); position: relative; }
+  .linha-vaga:hover { background: #0F0E0C; }
+  .linha-vaga.sel { background: var(--sel); }
+  .linha-vaga.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--ouro); }
+  .linha-vaga .corpo { flex: 1; min-width: 0; display: block; }
+  .linha-vaga .titulo { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+                        font-size: 14.5px; font-weight: 600; line-height: 1.35; color: var(--forte); }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; margin-top: 5px; font-size: 12.5px; color: var(--suave); }
+  .meta b { color: var(--ouro-claro); font-weight: 600; }
+  .nova { font-size: 11.5px; font-weight: 600; color: #0A0A0A; background: var(--ouro-claro); padding: 1px 7px; border-radius: 999px; }
+  .fala { display: inline-flex; align-items: center; gap: 4px; color: var(--ouro-claro); }
+  .fala svg { width: 12px; height: 12px; }
+  .grupo { padding: 16px 16px 6px; font-size: 13px; font-weight: 600; color: var(--texto); border-bottom: 1px solid var(--linha); }
+  .grupo small { font-weight: 500; color: var(--suave); margin-left: 6px; }
+  .vazio { padding: 28px 16px; font-size: 14px; color: var(--suave); max-width: 52ch; }
+  .vazio button { color: var(--ouro-claro); text-decoration: underline; text-underline-offset: 3px; }
+  .mais { width: 100%; padding: 16px; font-size: 13px; color: var(--suave); }
+  .mais:hover { color: var(--forte); }
+
+  /* ---------------------------------------------------------------- detalhe */
+  .folha-topo { display: none; }
+  .vaga-det { padding: 28px 32px 48px; max-width: 760px; }
+  .vaga-det h2 { font-size: 22px; font-weight: 600; line-height: 1.3; color: var(--forte); letter-spacing: -.01em; }
+  .origem { display: flex; flex-wrap: wrap; gap: 2px 14px; margin-top: 8px; font-size: 13px; color: var(--suave); }
+  .origem b { color: var(--texto); font-weight: 600; }
+  .placar { display: flex; align-items: center; gap: 18px; margin: 24px 0 8px; }
+  .preco { flex: 1; min-width: 0; }
+  .preco b { display: block; font-size: 24px; font-weight: 600; color: var(--ouro-claro); letter-spacing: -.01em; line-height: 1.2; }
+  .preco b.sem { font-size: 18px; color: var(--texto); }
+  .preco small { display: block; font-size: 13px; color: var(--suave); margin-top: 2px; }
+  .etiquetas { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; color: var(--suave); margin-bottom: 4px; }
+  .vaga-det h3 { font-size: 13px; font-weight: 600; color: var(--texto); margin: 28px 0 10px; }
+  .termos { display: flex; flex-wrap: wrap; gap: 6px; }
+  .termos span { font-size: 12.5px; padding: 4px 10px; border-radius: 999px; background: rgba(212,175,55,.12); color: var(--ouro-claro); }
+  .termos.neutros span { background: transparent; border: 1px solid var(--linha2); color: var(--suave); }
+  .fraco { font-size: 13.5px; color: var(--suave); }
+  .desc { font-size: 14.5px; line-height: 1.7; color: #D9D3C7; white-space: pre-line; max-width: 68ch; overflow-wrap: anywhere; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+         text-decoration: none; border: 1px solid var(--linha2); white-space: nowrap; }
   .btn.ouro { background: var(--jfc-ouro-metal); color: #0A0A0A; border-color: transparent; }
-  .btn[disabled] { opacity: .45; cursor: default; }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .sem-vaga { padding: 48px 32px; color: var(--suave); font-size: 14px; }
 
-  /* configurar */
-  .secao { border: 1px solid var(--borda); border-radius: 16px; background: rgba(18,17,16,.6); padding: 16px; margin-bottom: 14px; }
-  .secao h2 { font-size: 13px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--jfc-texto-forte); margin-bottom: 4px; }
-  .secao .ajuda { font-size: 12.5px; color: var(--jfc-texto-suave); margin-bottom: 12px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--borda2); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13px; }
+  /* ---------------------------------------------------------------- computador: duas colunas */
+  @media (min-width: 960px) {
+    .tela-vagas { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+    .topo { padding: 16px 24px 12px; }
+    .abas { padding: 0 14px; }
+    .barra { padding: 12px 24px 14px; }
+    .barra .ajuda { flex: 0 1 auto; margin-right: 8px; }
+    .area { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(380px, 460px) 1fr; }
+    .lista { overflow-y: auto; border-right: 1px solid var(--linha); }
+    .detalhe { overflow-y: auto; }
+    .linha-vaga { padding: 14px 20px; }
+    main.config { padding: 8px 24px 64px; }
+  }
+  /* ---------------------------------------------------------------- celular: uma coluna, detalhe por cima */
+  @media (max-width: 959px) {
+    .lista { max-width: 760px; }
+    .detalhe { position: fixed; inset: 0; z-index: 10; background: var(--fundo); overflow-y: auto; overscroll-behavior: contain;
+               transform: translateX(100%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s; }
+    .detalhe.aberto { transform: none; visibility: visible; transition: transform .22s ease; }
+    .folha-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 1;
+                  padding: 10px 16px; background: rgba(10,10,10,.94); border-bottom: 1px solid var(--linha); backdrop-filter: blur(6px); }
+    .folha-topo .voltar { font-size: 14px; color: var(--texto); padding: 8px 4px; }
+    .folha-topo .btn { padding: 9px 14px; font-size: 13.5px; }
+    .vaga-det { padding: 20px 16px 48px; }
+    .vaga-det h2 { font-size: 20px; }
+    .placar .btn { display: none; }
+    .barra { gap: 10px 8px; }
+    .seg .longo { display: none; }
+    .seg .curto { display: inline; }
+    .seg > span { padding: 0 6px 0 8px; }
+    .seg button { padding: 5px 9px; font-size: 12.5px; }
+    .barra .resumo { margin-left: 0; flex: 1 1 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .anel.grande .arco { animation: none; }
+    .detalhe, .detalhe.aberto { transition: none; }
+  }
+
+  /* ---------------------------------------------------------------- configurar */
+  .config { max-width: 680px; padding: 8px 16px 64px; }
+  .config > h1 { font-size: 22px; font-weight: 600; color: var(--forte); margin: 10px 0 18px; }
+  .secao { border-top: 1px solid var(--linha); padding: 22px 0; }
+  .secao h2 { font-size: 15px; font-weight: 600; color: var(--forte); margin-bottom: 4px; }
+  .secao .ajuda { font-size: 13px; color: var(--suave); margin-bottom: 14px; max-width: 60ch; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--linha2); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13px; }
   .chip.meio { border-style: dashed; }
-  .chip button { font-size: 11px; padding: 2px 7px; border-radius: 999px; color: var(--jfc-texto-suave); }
-  .chip .peso { border: 1px solid var(--borda2); color: var(--jfc-ouro-claro); }
-  .linha { display: flex; gap: 8px; flex-wrap: wrap; }
-  .linha input, .linha select { flex: 1; min-width: 120px; background: #121110; border: 1px solid var(--borda2); border-radius: 10px; padding: 10px 12px; color: var(--jfc-texto-forte); }
-  .linha select { flex: 0 0 auto; min-width: 0; }
-  .msg { font-size: 12.5px; margin-top: 8px; min-height: 18px; color: var(--jfc-ouro-claro); }
+  .chip button { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; color: var(--suave); }
+  .chip .peso { border: 1px solid var(--linha2); color: var(--ouro-claro); }
+  .form-linha { display: flex; gap: 8px; flex-wrap: wrap; }
+  .form-linha input, .form-linha select { flex: 1; min-width: 140px; background: #121110; border: 1px solid var(--linha2); border-radius: 10px; padding: 10px 12px; color: var(--forte); }
+  .form-linha select { flex: 0 0 auto; min-width: 0; }
+  .msg { font-size: 13px; margin-top: 8px; min-height: 18px; color: var(--ouro-claro); }
   .msg.erro { color: var(--jfc-alerta); }
   .convite { margin-top: 12px; border: 1px dashed rgba(212,175,55,.5); border-radius: 12px; padding: 12px; font-size: 13px; white-space: pre-line; }
-  .pessoas { margin-top: 14px; }
-  .pessoa { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--borda); font-size: 13px; }
+  .botoes { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .pessoa { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--linha); font-size: 13px; }
   .pessoa .q { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-  .pessoa .q small { display: block; color: var(--jfc-texto-suave); font-size: 11.5px; }
+  .pessoa .q small { display: block; color: var(--suave); font-size: 12px; }
 
-  /* login */
-  .login { min-height: 86vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 14px; }
+  /* ---------------------------------------------------------------- login */
+  .login { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 14px; padding: 16px; }
   .login img { height: 120px; margin-bottom: 6px; }
-  .login h1 { font-size: 22px; font-weight: 600; letter-spacing: .4em; color: var(--jfc-texto-forte); padding-left: .4em; }
-  .login p { color: var(--jfc-texto-suave); font-size: 14px; max-width: 30ch; }
+  .login h1 { font-size: 22px; font-weight: 600; letter-spacing: .4em; color: var(--forte); padding-left: .4em; }
+  .login p { color: var(--suave); font-size: 14px; max-width: 30ch; }
   .login form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; margin-top: 10px; }
-  .login input { background: #121110; border: 1px solid var(--borda2); border-radius: 10px; padding: 12px 14px; color: var(--jfc-texto-forte); }
-  .login .btn { padding: 12px; font-size: 14px; }
-  .login .alt { font-size: 12.5px; color: var(--jfc-texto-suave); text-decoration: underline; }
-  .aviso { font-size: 13px; color: var(--jfc-ouro-claro); min-height: 20px; }
-  .erro { color: var(--jfc-alerta); }
-  .carregando { padding: 40px 0; text-align: center; color: var(--jfc-texto-suave); }
+  .login input { background: #121110; border: 1px solid var(--linha2); border-radius: 10px; padding: 12px 14px; color: var(--forte); }
+  .login .btn { padding: 12px; }
+  .login .alt { font-size: 13px; color: var(--suave); text-decoration: underline; text-align: center; }
+  .aviso { font-size: 13px; color: var(--ouro-claro); min-height: 20px; }
 </style>
 </head>
 <body>
-<main class="app" id="app"><div class="carregando">Carregando…</div></main>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs><linearGradient id="radar-ouro" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#F8D99D"/><stop offset=".45" stop-color="#E2B062"/><stop offset="1" stop-color="#BF8A45"/>
+  </linearGradient></defs>
+</svg>
+<div id="app"><div class="carregando">Carregando…</div></div>
 
 <script>
 (function () {
 /*
-  Radar — vagas de freela ranqueadas pelo perfil de quem está logado (docs/SDD_multiusuario.md).
+  Radar: vagas de freela ranqueadas pelo perfil de quem está logado.
+  Desenho: docs/SDD_multiusuario.md (perfis e convite) e docs/SDD_freelas_br_e_layout.md (fontes BR, abas, duas colunas).
   A chave abaixo é a PÚBLICA (papel "anon"): sozinha não lê nada. As regras de acesso (RLS) só
   liberam as vagas para convidados e o perfil para o próprio dono. Por isso pode ficar no código.
 */
@@ -133,38 +210,78 @@ const SUPABASE_URL = "https://kagwnqkhatulpswqigzm.supabase.co";
 const CHAVE_PUBLICA = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZ3ducWtoYXR1bHBzd3FpZ3ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNTc2NTIsImV4cCI6MjA5NzYzMzY1Mn0.mz0oERNhhta2Z7d2icoNXrYsdtrZSki3CZEZu9vHc78";
 const DONO = "jeanfelipecr@gmail.com";   // só ele vê "Convidar" (a função convidar confere de novo no servidor)
 // Trava do login: a padrão (navigator.locks) ficava esperando para sempre e as consultas nunca voltavam.
-// Com poucos usuários, rodar direto é seguro — a supabase-js já evita renovar o token duas vezes na mesma aba.
+// Com poucos usuários, rodar direto é seguro: a supabase-js já evita renovar o token duas vezes na mesma aba.
 const sb = supabase.createClient(SUPABASE_URL, CHAVE_PUBLICA, { auth: { lock: async (nome, espera, fn) => await fn() } });
 
-const PRAZOS = [
-  { id: "dias",    titulo: "DIAS",    sub: "treino e avaliação de IA — sem cliente, sem proposta" },
-  { id: "semanas", titulo: "SEMANAS", sub: "projeto com cliente, por proposta" },
-  { id: "meses",   titulo: "MESES",   sub: "seleção pesada, paga mais", vazio: "Toptal e Arc entram como link na parte 4." },
+const ABAS = [
+  { id: "dias", nome: "Dias", ajuda: "Treino e avaliação de IA. Sem cliente e sem proposta: o primeiro dinheiro sai em dias.",
+    filtro: v => v.tipo === "freela" && v.prazo === "dias" },
+  { id: "semanas", nome: "Semanas", ajuda: "Projeto com cliente, por proposta.",
+    filtro: v => v.tipo === "freela" && v.prazo === "semanas" },
+  { id: "meses", nome: "Meses", ajuda: "Seleção pesada, paga mais.",
+    filtro: v => v.tipo === "freela" && v.prazo === "meses", vazio: "Ainda não tem fonte para este prazo. Toptal e Arc entram como link mais adiante." },
+  { id: "mercado", nome: "Mercado", ajuda: "Tempo integral. Não cabe ao lado do horário comercial; fica aqui pra você ler o mercado.",
+    filtro: v => v.tipo === "integral" },
 ];
-const FONTE = { mercor: "Mercor", braintrust: "Braintrust", freelancer: "Freelancer" };
-const UNIDADE = { hora: "/h", tarefa: "/tarefa", projeto: "/projeto", ano: "/ano" };
+const FONTE = {
+  mercor: { nome: "Mercor", prep: "na" }, braintrust: { nome: "Braintrust", prep: "na" }, freelancer: { nome: "Freelancer", prep: "na" },
+  workana: { nome: "Workana", prep: "na" }, "99freelas": { nome: "99Freelas", prep: "no" },
+};
+const IDIOMA = { en: "em inglês", pt: "em português", es: "em espanhol", fr: "em francês", de: "em alemão", it: "em italiano" };
+const UNIDADE_CURTA = { hora: "/h", tarefa: "/tarefa", projeto: "", ano: "/ano" };
+const UNIDADE_LONGA = { hora: "por hora", tarefa: "por tarefa", projeto: "pelo projeto inteiro", ano: "por ano" };
+const GRUPOS = [["hora", "Por hora"], ["tarefa", "Por tarefa"], ["projeto", "Pelo projeto"], ["ano", "Por ano"], [null, "Sem valor informado"]];
+const MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+
 const app = document.getElementById("app");
-const estado = { sessao: null, tela: "vagas", vagas: [], frescor: [], perfil: null, termos: [], convidados: null,
-                 abertos: ler("radar_abertos", ["dias"]), mostrarTodas: {} };
+const telaLarga = matchMedia("(min-width: 960px)");
+const estado = {
+  sessao: null, tela: "vagas", vagas: [], frescor: [], perfil: null, termos: [], descricoes: new Map(),
+  aba: ler("radar_aba", "dias"), ordem: ler("radar_ordem", "encaixe"), mostrarTodas: {}, selecionada: null,
+};
 
 function ler(chave, padrao) { try { return JSON.parse(localStorage.getItem(chave)) ?? padrao; } catch { return padrao; } }
 function gravar(chave, valor) { try { localStorage.setItem(chave, JSON.stringify(valor)); } catch {} }
 
 // Texto vindo das fontes é externo: sempre escapado antes de ir para o HTML.
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const dinheiro = v => v == null ? null : "US$ " + Math.round(Number(v)).toLocaleString("pt-BR");
-function valor(v) {
-  const a = dinheiro(v.valor_min), b = dinheiro(v.valor_max), u = UNIDADE[v.unidade] || "";
-  if (!b) return null;
-  return (a && v.valor_min !== v.valor_max ? `${a}–${b.replace("US$ ", "")}` : b) + u;
+const chave = v => v.fonte + ":" + v.id_externo;
+const usd = v => v.valor_max ?? v.valor_min;   // em US$: é o que ordena (a moeda da vaga é só para mostrar)
+
+function dinheiro(n, moeda = "USD") {
+  try { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(n); }
+  catch { return `${moeda} ${Math.round(n).toLocaleString("pt-BR")}`; }
+}
+const numeroBR = n => Math.round(Number(n)).toLocaleString("pt-BR");
+// Faixa na moeda da vaga ("US$ 40–60", "até US$ 50", "a partir de US$ 3.000"); null = a vaga não diz quanto paga
+function faixa(min, max, moeda) {
+  if (min == null && max == null) return null;
+  if (min != null && max != null) return Number(min) === Number(max) ? dinheiro(max, moeda) : `${dinheiro(min, moeda)}–${numeroBR(max)}`;
+  return max != null ? `até ${dinheiro(max, moeda)}` : `a partir de ${dinheiro(min, moeda)}`;
+}
+function valorDaVaga(v) {
+  const original = faixa(v.valor_min_original, v.valor_max_original, v.moeda || "USD")
+                ?? faixa(v.valor_min, v.valor_max, "USD");
+  if (!original) return null;
+  const convertido = v.moeda && v.moeda !== "USD" ? faixa(v.valor_min, v.valor_max, "USD") : null;
+  return { curto: original + (UNIDADE_CURTA[v.unidade] ?? ""), texto: original, unidade: UNIDADE_LONGA[v.unidade] || "",
+           emDolar: convertido ? `cerca de ${convertido} em dólar` : null };
 }
 // Mercor: o número é o TETO (paga por hora). Braintrust/Freelancer: horas ESPERADAS. (decisão de 13/10/2026)
-const horas = v => !v.horas_semana ? null : v.fonte === "mercor" ? `teto ${v.horas_semana}h/sem` : `espera ${v.horas_semana}h/sem`;
+const horas = v => !v.horas_semana ? null : v.fonte === "mercor" ? `até ${v.horas_semana}h por semana` : `${v.horas_semana}h por semana`;
 function haQuanto(iso) {
-  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (min < 60) return `há ${min} min`;
   const h = Math.round(min / 60);
-  return h < 48 ? `há ${h} h` : `há ${Math.round(h / 24)} dias`;
+  if (h < 48) return `há ${h} h`;
+  const d = Math.round(h / 24);
+  return d < 60 ? `há ${d} dias` : `há ${Math.round(d / 30)} meses`;
+}
+function anel(n, grande = false) {
+  const nivel = n >= 75 ? "alto" : n >= 50 ? "medio" : n > 0 ? "baixo" : "zero";
+  return `<span class="anel ${nivel}${grande ? " grande" : ""}" role="img" aria-label="encaixe ${n} de 100">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><circle class="trilho" cx="20" cy="20" r="17"/><circle class="arco" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="${n} 100"/></svg>
+    <b>${n}</b></span>`;
 }
 
 /* ------------------------------------------------------------ login */
@@ -187,7 +304,7 @@ function telaLogin(msg = "", erro = false) {
   document.getElementById("form").onsubmit = async e => {
     e.preventDefault();
     const senha = document.getElementById("senha").value;
-    if (!senha) { aviso.className = "aviso erro"; aviso.textContent = "Digite a senha — ou peça o link no e-mail."; return; }
+    if (!senha) { aviso.className = "aviso erro"; aviso.textContent = "Digite a senha ou peça o link no e-mail."; return; }
     aviso.className = "aviso"; aviso.textContent = "Entrando…";
     const { error } = await sb.auth.signInWithPassword({ email: email(), password: senha });
     if (error) { aviso.className = "aviso erro"; aviso.textContent = "E-mail ou senha não conferem."; }
@@ -197,38 +314,67 @@ function telaLogin(msg = "", erro = false) {
     aviso.className = "aviso"; aviso.textContent = "Enviando…";
     const { error } = await sb.auth.signInWithOtp({ email: email(), options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname } });
     if (error) { aviso.className = "aviso erro"; aviso.textContent = "Não consegui enviar: " + error.message; return; }
-    aviso.textContent = "Pronto. Abre o e-mail \"Your sign-in link\" e toca no link.";
+    aviso.textContent = "Pronto. Abra o e-mail \"Your sign-in link\" e toque no link.";
   };
 }
 
 /* ------------------------------------------------------------ dados */
+// A API do banco devolve no máximo 1.000 linhas por consulta: a lista é lida em páginas,
+// em ordem fixa (fonte, id), senão uma vaga podia sair em duas páginas ou em nenhuma.
+async function lerVagas() {
+  const campos = "fonte,id_externo,titulo,empresa,url,area,habilidades,tipo,prazo,valor_min,valor_max,unidade,horas_semana," +
+                 "entrevista_falada,publicada_em,encaixe,termos,nova,abaixo_minimo,idioma,moeda,valor_min_original,valor_max_original";
+  const todas = [];
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await sb.from("vaga_radar").select(campos).eq("aceita_brasil", true).eq("escondida", false)
+      .order("fonte").order("id_externo").range(de, de + 999);
+    if (error) throw error;
+    todas.push(...data);
+    if (data.length < 1000) return todas;
+  }
+}
 async function carregar() {
-  const campos = "fonte,id_externo,titulo,empresa,url,area,habilidades,tipo,prazo,valor_min,valor_max,unidade,horas_semana,entrevista_falada,aceita_brasil,publicada_em,primeira_vez_em,encaixe,termos,escondida,nova,abaixo_minimo";
-  const [v, f, p, t] = await Promise.all([
-    sb.from("vaga_radar").select(campos).eq("aceita_brasil", true).eq("escondida", false)
-      .order("encaixe", { ascending: false }).order("valor_max", { ascending: false, nullsFirst: false }),
+  const [vagas, f, p, t] = await Promise.all([
+    lerVagas(),
     sb.from("frescor_fonte").select("*"),
-    sb.from("perfil").select("user_id,nome,modelo,valor_min_usd").maybeSingle(),
+    sb.from("perfil").select("user_id,nome,modelo,valor_min_usd,idioma_vagas").maybeSingle(),
     sb.from("perfil_termo").select("termo,rotulo,peso,tipo").order("tipo").order("peso", { ascending: false }).order("rotulo"),
   ]);
-  const erro = v.error || f.error || p.error || t.error;
+  const erro = f.error || p.error || t.error;
   if (erro) throw erro;
-  estado.vagas = v.data; estado.frescor = f.data; estado.perfil = p.data; estado.termos = t.data;
+  estado.vagas = vagas; estado.frescor = f.data; estado.perfil = p.data; estado.termos = t.data;
 }
+const idioma = () => estado.perfil?.idioma_vagas || "todos";
+
+// O que a pessoa vê: sem as abaixo do valor mínimo e, no modo Português, só vaga em português
+function visiveis() {
+  return estado.vagas.filter(v => !v.abaixo_minimo && (idioma() === "todos" || v.idioma === "pt"));
+}
+function ordenar(vs) {
+  const porEncaixe = (a, b) => b.encaixe - a.encaixe || (usd(b) ?? -1) - (usd(a) ?? -1) || String(b.publicada_em).localeCompare(String(a.publicada_em));
+  if (estado.ordem !== "valor") return [...vs].sort(porEncaixe);
+  // Por valor: US$ 50 por hora e US$ 500 pelo projeto não se comparam, então cada unidade é um grupo
+  return [...vs].sort((a, b) => {
+    const ga = usd(a) == null ? GRUPOS.length - 1 : Math.max(0, GRUPOS.findIndex(([g]) => g === a.unidade));
+    const gb = usd(b) == null ? GRUPOS.length - 1 : Math.max(0, GRUPOS.findIndex(([g]) => g === b.unidade));
+    return ga - gb || (usd(b) ?? -1) - (usd(a) ?? -1) || b.encaixe - a.encaixe;
+  });
+}
+const grupoDe = v => usd(v) == null ? null : v.unidade;
 
 /* ------------------------------------------------------------ topo */
 function topo() {
   const ultima = estado.frescor.map(f => f.ultima_coleta_boa).filter(Boolean).sort().pop();
-  const atrasada = !ultima || (Date.now() - new Date(ultima)) > 150 * 60000 || estado.frescor.some(f => f.ultima_deu_certo === false);
-  const falhas = estado.frescor.filter(f => f.ultima_deu_certo === false).map(f => FONTE[f.fonte] || f.fonte).join(", ");
+  const falhas = estado.frescor.filter(f => f.ultima_deu_certo === false).map(f => FONTE[f.fonte]?.nome || f.fonte);
+  const atrasada = !ultima || (Date.now() - new Date(ultima)) > 150 * 60000 || falhas.length > 0;
   const config = estado.tela === "config";
   return `
     <header class="topo">
       <img src="https://jeanfelipecr-ds.github.io/marca/simbolo-ouro.svg" alt="">
       <div class="marca"><b>RADAR</b>
-        <small class="${atrasada ? "atrasada" : ""}">${ultima ? "última busca " + haQuanto(ultima) : "sem busca ainda"}${falhas ? " · falhou: " + esc(falhas) : ""}</small></div>
+        <small class="${atrasada ? "atrasada" : ""}">${ultima ? "última busca " + haQuanto(ultima) : "sem busca ainda"}${falhas.length ? `. Falhou: ${esc(falhas.join(", "))}` : ""}</small></div>
       <div class="acoes">
-        <button type="button" data-acao="${config ? "vagas" : "config"}">${config ? "← Vagas" : "Configurar"}</button>
+        <button type="button" data-acao="${config ? "vagas" : "config"}">${config ? "Voltar às vagas" : "Configurar"}</button>
         <button type="button" data-acao="sair">Sair</button>
       </div>
     </header>`;
@@ -236,79 +382,162 @@ function topo() {
 
 /* ------------------------------------------------------------ vagas */
 function linhaVaga(v) {
-  const n = v.encaixe >= 75 ? "n75" : v.encaixe >= 50 ? "n50" : "";
-  const partes = [valor(v) ? `<b>${esc(valor(v))}</b>` : null, horas(v), FONTE[v.fonte] || v.fonte].filter(Boolean);
+  const valor = valorDaVaga(v), h = horas(v);
+  const sel = estado.selecionada === chave(v);
   return `
-    <div class="vaga" data-chave="${esc(v.fonte + ":" + v.id_externo)}">
-      <button type="button" data-acao="vaga">
-        <span class="nota ${n}" title="encaixe">${v.encaixe}</span>
-        <span class="corpo">
-          <h3>${esc(v.titulo)}</h3>
-          <div class="meta">${partes.join(" · ")}</div>
-          <div class="etiquetas">
-            ${v.nova ? '<span class="etq nova">nova</span>' : ""}
-            ${v.entrevista_falada ? '<span class="etq fala">🎙️ entrevista falada</span>' : ""}
-          </div>
+    <button type="button" class="linha-vaga${sel ? " sel" : ""}" data-acao="vaga" data-chave="${esc(chave(v))}"${sel ? ' aria-current="true"' : ""}>
+      ${anel(v.encaixe)}
+      <span class="corpo">
+        <span class="titulo">${esc(v.titulo)}</span>
+        <span class="meta">
+          ${valor ? `<b>${esc(valor.curto)}</b>` : ""}
+          ${h ? `<span>${esc(h)}</span>` : ""}
+          <span>${esc(FONTE[v.fonte]?.nome || v.fonte)}</span>
+          ${v.nova ? '<span class="nova">nova</span>' : ""}
+          ${v.entrevista_falada ? `<span class="fala">${MIC}entrevista falada</span>` : ""}
         </span>
-      </button>
-      <div class="detalhe"></div>
-    </div>`;
+      </span>
+    </button>`;
 }
 
-function bloco(id, titulo, sub, vagas, extra = "", vazio = "Nada por enquanto.") {
-  const comEncaixe = vagas.filter(v => v.encaixe > 0);
-  const resto = vagas.length - comEncaixe.length;
-  const mostrar = estado.mostrarTodas[id] ? vagas : comEncaixe;
-  const melhor = comEncaixe.length ? comEncaixe[0].encaixe : 0;
-  return `
-    <section class="bloco ${extra} ${estado.abertos.includes(id) ? "aberto" : ""}" data-bloco="${id}">
-      <button type="button" data-acao="bloco">
-        <span class="t"><b>${titulo}</b><span>${sub}${comEncaixe.length ? ` · melhor encaixe ${melhor}` : ""}</span></span>
-        <span class="qtd">${comEncaixe.length}</span><span class="seta">›</span>
-      </button>
-      <div class="lista">
-        ${mostrar.length ? mostrar.map(linhaVaga).join("") : `<div class="vazio">${esc(vazio)}</div>`}
-        ${resto && !estado.mostrarTodas[id] ? `<button class="mais" type="button" data-acao="mais">mostrar as outras ${resto} (sem encaixe com o seu perfil)</button>` : ""}
-      </div>
-    </section>`;
+function listaDaAba(aba, vs) {
+  const comEncaixe = vs.filter(v => v.encaixe > 0);
+  const mostrar = ordenar(estado.mostrarTodas[aba.id] ? vs : comEncaixe);
+  const resto = vs.length - comEncaixe.length;
+  if (!vs.length) {
+    const emOutraLingua = idioma() === "pt" ? estado.vagas.filter(v => !v.abaixo_minimo && aba.filtro(v)).length : 0;
+    if (emOutraLingua) return `<p class="vazio">Nenhuma vaga em português nesta aba. Há ${emOutraLingua} em outras línguas. <button type="button" data-acao="idioma" data-valor="todos">Mostrar todas</button></p>`;
+    return `<p class="vazio">${esc(aba.vazio || "Nada por enquanto.")}</p>`;
+  }
+  let html = "", grupo;
+  for (const v of mostrar) {
+    if (estado.ordem === "valor" && grupoDe(v) !== grupo) {
+      grupo = grupoDe(v);
+      const nome = GRUPOS.find(([g]) => g === grupo)?.[1] || "Outros";
+      html += `<p class="grupo">${nome}<small>${mostrar.filter(x => grupoDe(x) === grupo).length}</small></p>`;
+    }
+    html += linhaVaga(v);
+  }
+  if (!mostrar.length) html += `<p class="vazio">Nenhuma vaga desta aba tem uma habilidade sua.</p>`;
+  if (resto && !estado.mostrarTodas[aba.id]) html += `<button class="mais" type="button" data-acao="mais">Mostrar as outras ${resto}: nenhuma habilidade sua aparece nelas</button>`;
+  return html;
 }
 
 function telaVagas() {
-  const visiveis = estado.vagas.filter(v => !v.abaixo_minimo);
-  const abaixo = estado.vagas.length - visiveis.length;
-  const freela = visiveis.filter(v => v.tipo === "freela");
-  const integral = visiveis.filter(v => v.tipo === "integral");
-  const novas = freela.filter(v => v.nova && v.encaixe >= 50).length;
-  app.innerHTML = topo() + `
-    <div class="numeros">
-      <div class="num"><div class="v ouro">${novas}</div><div class="l">vagas novas no seu perfil (24 h)</div></div>
-      <div class="num breve"><div class="v">—</div><div class="l">candidaturas em andamento · parte 3</div></div>
-      <div class="num breve"><div class="v">—</div><div class="l">recebido no mês · parte 3</div></div>
-    </div>
-    ${abaixo ? `<p class="nota-min">${abaixo} vagas escondidas pelo seu valor mínimo de ${esc(dinheiro(estado.perfil?.valor_min_usd))}.</p>` : ""}
-    <p class="rotulo" style="margin:0 0 10px"><span class="traco"></span>Freela · por tempo até o 1º dinheiro</p>
-    ${PRAZOS.map(p => bloco(p.id, p.titulo, p.sub, freela.filter(v => v.prazo === p.id), "", p.vazio)).join("")}
-    <p class="rotulo" style="margin:24px 0 10px"><span class="traco" style="background:#4A453D"></span>Termômetro</p>
-    ${bloco("mercado", "MERCADO — TEMPO INTEGRAL", "não cabe com o horário comercial; só pra ler o mercado", integral, "mercado")}`;
+  const vs = visiveis();
+  const aba = ABAS.find(a => a.id === estado.aba) || ABAS[0];
+  const daAba = vs.filter(aba.filtro);
+  const escondidas = estado.vagas.filter(v => v.abaixo_minimo).length;
+  const novas = vs.filter(v => v.tipo === "freela" && v.nova && v.encaixe >= 50).length;
+  const visiveisNaLista = ordenar(estado.mostrarTodas[aba.id] ? daAba : daAba.filter(v => v.encaixe > 0));
+  // no computador o detalhe nunca fica vazio: sem seleção na lista, abre a primeira
+  if (telaLarga.matches && !visiveisNaLista.some(v => chave(v) === estado.selecionada)) estado.selecionada = visiveisNaLista[0] ? chave(visiveisNaLista[0]) : null;
+  const resumo = [
+    novas ? `<b>${novas}</b> ${novas === 1 ? "nova" : "novas"} no seu perfil nas últimas 24 h` : "",
+    escondidas ? `${escondidas} escondidas pelo valor mínimo de ${esc(dinheiro(estado.perfil?.valor_min_usd))}` : "",
+  ].filter(Boolean).join(". ");
+  app.innerHTML = `
+    <div class="tela-vagas">
+      ${topo()}
+      <nav class="abas" role="tablist" aria-label="Prazo até o primeiro dinheiro">
+        ${ABAS.map(a => `<button type="button" class="aba" role="tab" aria-selected="${a.id === aba.id}" data-acao="aba" data-valor="${a.id}">${a.nome}<small>${vs.filter(a.filtro).filter(v => v.encaixe > 0).length}</small></button>`).join("")}
+      </nav>
+      <div class="barra">
+        <p class="ajuda">${esc(aba.ajuda)}</p>
+        <div class="seg" role="group" aria-label="Idioma das vagas">
+          <button type="button" data-acao="idioma" data-valor="todos" aria-pressed="${idioma() === "todos"}">Todas</button>
+          <button type="button" data-acao="idioma" data-valor="pt" aria-pressed="${idioma() === "pt"}">Português</button>
+        </div>
+        <div class="seg" role="group" aria-label="Ordenar">
+          <span><span class="longo">Ordenar por</span><span class="curto">Ordem</span></span>
+          <button type="button" data-acao="ordem" data-valor="encaixe" aria-pressed="${estado.ordem !== "valor"}">encaixe</button>
+          <button type="button" data-acao="ordem" data-valor="valor" aria-pressed="${estado.ordem === "valor"}">valor</button>
+        </div>
+        ${resumo ? `<p class="resumo">${resumo}.</p>` : ""}
+      </div>
+      <div class="area">
+        <section class="lista" id="lista" role="tabpanel" aria-label="${esc(aba.nome)}">${listaDaAba(aba, daAba)}</section>
+        <aside class="detalhe" id="detalhe" aria-label="Detalhe da vaga"></aside>
+      </div>
+    </div>`;
+  if (telaLarga.matches) mostrarDetalhe();
 }
 
-async function abrirDetalhe(el) {
-  const caixa = el.querySelector(".detalhe");
-  const [fonte, id] = el.dataset.chave.split(/:(.*)/s);
-  const v = estado.vagas.find(x => x.fonte === fonte && x.id_externo === id);
-  caixa.innerHTML = `
-    ${v.termos.length ? `<div class="termos">${v.termos.map(t => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
-    <p class="pouco">${[v.area, v.empresa, v.publicada_em ? "publicada em " + new Date(v.publicada_em).toLocaleDateString("pt-BR") : null].filter(Boolean).map(esc).join(" · ")}</p>
-    <p class="desc">Carregando descrição…</p>
-    <div class="botoes">
-      <a class="btn ouro" href="${esc(v.url)}" target="_blank" rel="noopener">Abrir vaga ↗</a>
-      <button class="btn" type="button" disabled title="chega na parte 3">Me candidatei</button>
-    </div>`;
-  // a descrição é grande: só busca quando a vaga é aberta
-  const { data } = await sb.from("vaga").select("descricao").eq("fonte", fonte).eq("id_externo", id).maybeSingle();
-  const texto = (data?.descricao || "").replace(/<[^>]+>/g, " ").replace(/[#*_`>]+/g, "").replace(/^\s*-\s+/gm, "• ").replace(/[ \t]+\n/g, "\n").replace(/\n{2,}/g, "\n").trim();
-  caixa.querySelector(".desc").textContent = texto ? (texto.length > 700 ? texto.slice(0, 700) + "…" : texto) : "Sem descrição na fonte — abre a vaga.";
+function vagaPorChave(k) { return estado.vagas.find(v => chave(v) === k); }
+
+function detalheHtml(v) {
+  const f = FONTE[v.fonte] || { nome: v.fonte, prep: "na" };
+  const valor = valorDaVaga(v), h = horas(v);
+  const abrir = `<a class="btn ouro" href="${esc(v.url)}" target="_blank" rel="noopener">Abrir ${f.prep} ${esc(f.nome)}</a>`;
+  const semValor = v.fonte === "99freelas"
+    ? `<b class="sem">Orçamento aberto</b><small>quem propõe o preço é você</small>`
+    : `<b class="sem">Valor não informado</b>`;
+  return `
+    <div class="folha-topo"><button type="button" class="voltar" data-acao="fechar">Voltar</button>${abrir}</div>
+    <article class="vaga-det">
+      <h2>${esc(v.titulo)}</h2>
+      <p class="origem"><b>${esc(f.nome)}</b>${v.empresa ? `<span>${esc(v.empresa)}</span>` : ""}${v.publicada_em ? `<span>publicada ${haQuanto(v.publicada_em)}</span>` : ""}${IDIOMA[v.idioma] ? `<span>${IDIOMA[v.idioma]}</span>` : ""}</p>
+      <div class="placar">
+        ${anel(v.encaixe, true)}
+        <div class="preco">${valor ? `<b>${esc(valor.texto)}</b><small>${esc(valor.unidade)}${valor.emDolar ? `, ${esc(valor.emDolar)}` : ""}</small>` : semValor}</div>
+        ${abrir}
+      </div>
+      ${v.nova || v.entrevista_falada || h ? `<div class="etiquetas">
+        ${v.nova ? '<span class="nova">nova</span>' : ""}
+        ${v.entrevista_falada ? `<span class="fala">${MIC}entrevista falada, em inglês</span>` : ""}
+        ${h ? `<span>${esc(h)}</span>` : ""}</div>` : ""}
+      <h3>Por que essa nota</h3>
+      ${v.termos.length ? `<div class="termos">${v.termos.map(t => `<span>${esc(t)}</span>`).join("")}</div>`
+                        : `<p class="fraco">Nenhuma das suas habilidades aparece nesta vaga.</p>`}
+      <h3>Sobre a vaga</h3>
+      <div class="desc" data-desc>Carregando a descrição…</div>
+      ${v.area || v.habilidades?.length ? `<h3>Como a ${esc(f.nome)} classifica</h3>
+        <div class="termos neutros">${[v.area, ...(v.habilidades || [])].filter(Boolean).slice(0, 14).map(t => `<span>${esc(t)}</span>`).join("")}</div>` : ""}
+    </article>`;
 }
+
+async function mostrarDetalhe() {
+  const caixa = document.getElementById("detalhe");
+  if (!caixa) return;
+  const v = vagaPorChave(estado.selecionada);
+  if (!v) { caixa.innerHTML = `<p class="sem-vaga">Nenhuma vaga para mostrar com esses filtros.</p>`; return; }
+  caixa.innerHTML = detalheHtml(v);
+  caixa.scrollTop = 0;
+  // a descrição é grande: só é buscada quando a vaga é aberta (e fica guardada enquanto a página estiver aberta)
+  const k = chave(v);
+  if (!estado.descricoes.has(k)) {
+    const { data } = await sb.from("vaga").select("descricao").eq("fonte", v.fonte).eq("id_externo", v.id_externo).maybeSingle();
+    const texto = (data?.descricao || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/[#*_`>]+/g, "")
+      .replace(/^\s*-\s+/gm, "• ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    estado.descricoes.set(k, texto);
+  }
+  const alvo = caixa.querySelector("[data-desc]");
+  if (alvo && estado.selecionada === k) alvo.textContent = estado.descricoes.get(k) || "A fonte não traz descrição. Abra a vaga para ler.";
+}
+
+function selecionar(k, abrirNoCelular = true) {
+  estado.selecionada = k;
+  document.querySelectorAll(".linha-vaga").forEach(el => {
+    const sel = el.dataset.chave === k;
+    el.classList.toggle("sel", sel);
+    sel ? el.setAttribute("aria-current", "true") : el.removeAttribute("aria-current");
+  });
+  mostrarDetalhe();
+  if (!telaLarga.matches && abrirNoCelular) {
+    document.getElementById("detalhe").classList.add("aberto");
+    document.body.style.overflow = "hidden";
+    history.pushState({ radarDetalhe: true }, "");   // o "voltar" do celular fecha o detalhe, não sai do Radar
+  }
+}
+function fecharDetalhe() {
+  const caixa = document.getElementById("detalhe");
+  if (!caixa?.classList.contains("aberto")) return;
+  caixa.classList.remove("aberto");
+  document.body.style.overflow = "";
+  document.querySelector(`.linha-vaga[data-chave="${CSS.escape(estado.selecionada || "")}"]`)?.focus({ preventScroll: true });
+}
+addEventListener("popstate", fecharDetalhe);
+telaLarga.addEventListener("change", () => { document.body.style.overflow = ""; if (estado.tela === "vagas" && estado.sessao) telaVagas(); });
 
 /* ------------------------------------------------------------ configurar */
 function chipsDe(tipo) {
@@ -316,18 +545,20 @@ function chipsDe(tipo) {
   if (!lista.length) return `<p class="ajuda">Nenhuma ainda.</p>`;
   return `<div class="chips">${lista.map(t => `
     <span class="chip ${t.peso < 1 ? "meio" : ""}" data-termo="${esc(t.termo)}">${esc(t.rotulo)}
-      ${tipo === "encaixe" ? `<button type="button" class="peso" data-acao="peso" title="peso — toque para trocar">${t.peso < 1 ? "½" : "1"}</button>` : ""}
-      <button type="button" data-acao="remover" title="remover">×</button></span>`).join("")}</div>`;
+      ${tipo === "encaixe" ? `<button type="button" class="peso" data-acao="peso" title="peso: toque para trocar">${t.peso < 1 ? "½" : "1"}</button>` : ""}
+      <button type="button" data-acao="remover" title="remover" aria-label="remover ${esc(t.rotulo)}">×</button></span>`).join("")}</div>`;
 }
 
 function telaConfig() {
   const dono = estado.sessao?.user?.email === DONO;
   app.innerHTML = topo() + `
+    <main class="config">
+    <h1>Configurar</h1>
     <section class="secao">
       <h2>Minhas habilidades</h2>
-      <p class="ajuda">A nota de encaixe de cada vaga sai daqui: palavra no título vale o dobro, na descrição vale metade. Peso ½ é pra o que você ainda está aprendendo. Vagas novas da Freelancer com uma palavra nova chegam na próxima busca (de hora em hora).</p>
+      <p class="ajuda">A nota de encaixe de cada vaga sai daqui: palavra no título vale o dobro, na descrição vale metade. Peso ½ é para o que você ainda está aprendendo. Freelancer, Workana e 99Freelas também buscam com estas palavras: uma palavra nova traz vagas novas na próxima busca (de hora em hora).</p>
       ${chipsDe("encaixe")}
-      <form class="linha" data-form="encaixe">
+      <form class="form-linha" data-form="encaixe">
         <input name="rotulo" placeholder="ex.: After Effects" required maxlength="60">
         <select name="peso"><option value="1">peso 1</option><option value="0.5">peso ½</option></select>
         <button class="btn ouro" type="submit">Adicionar</button>
@@ -339,7 +570,7 @@ function telaConfig() {
       <h2>Áreas para esconder</h2>
       <p class="ajuda">Vaga com essas palavras no título ou na área some da sua lista.</p>
       ${chipsDe("esconder")}
-      <form class="linha" data-form="esconder">
+      <form class="form-linha" data-form="esconder">
         <input name="rotulo" placeholder="ex.: Medicina" required maxlength="60">
         <button class="btn" type="submit">Esconder</button>
       </form>
@@ -348,10 +579,10 @@ function telaConfig() {
 
     <section class="secao">
       <h2>Valor mínimo</h2>
-      <p class="ajuda">Esconde vaga que paga menos que isso — por hora ou pelo projeto inteiro, na unidade da vaga. Em branco, mostra tudo.</p>
-      <form class="linha" data-form="minimo">
+      <p class="ajuda">Esconde vaga que paga menos que isso, por hora ou pelo projeto inteiro, na unidade da vaga. Vaga em outra moeda é convertida para dólar só para comparar. Em branco, mostra tudo.</p>
+      <form class="form-linha" data-form="minimo">
         <input name="minimo" type="number" min="0" step="1" inputmode="numeric" placeholder="em branco = tudo" value="${estado.perfil?.valor_min_usd ?? ""}">
-        <button class="btn ouro" type="submit">Salvar (US$)</button>
+        <button class="btn ouro" type="submit">Salvar em US$</button>
       </form>
       <div class="msg" data-msg="minimo"></div>
     </section>
@@ -359,9 +590,9 @@ function telaConfig() {
     <section class="secao">
       <h2>Trocar senha</h2>
       <p class="ajuda">Quem entrou com senha provisória troca aqui.</p>
-      <form class="linha" data-form="senha">
-        <input name="senha" type="password" autocomplete="new-password" placeholder="nova senha (8+)" minlength="8" required>
-        <button class="btn" type="submit">Trocar</button>
+      <form class="form-linha" data-form="senha">
+        <input name="senha" type="password" autocomplete="new-password" placeholder="nova senha (8 ou mais)" minlength="8" required>
+        <button class="btn" type="submit">Trocar senha</button>
       </form>
       <div class="msg" data-msg="senha"></div>
     </section>
@@ -369,16 +600,17 @@ function telaConfig() {
     ${dono ? `
     <section class="secao">
       <h2>Convidar amigos</h2>
-      <p class="ajuda">Cria o acesso com uma senha provisória pra você mandar no WhatsApp. O perfil começa pelo modelo escolhido e a pessoa edita depois.</p>
-      <form class="linha" data-form="convidar">
+      <p class="ajuda">Cria o acesso com uma senha provisória para você mandar no WhatsApp. O perfil começa pelo modelo escolhido e a pessoa edita depois.</p>
+      <form class="form-linha" data-form="convidar">
         <input name="email" type="email" placeholder="e-mail do amigo" required>
         <select name="modelo"><option value="video">modelo Vídeo</option><option value="dados">modelo Dados</option></select>
         <button class="btn ouro" type="submit">Criar acesso</button>
       </form>
       <div class="msg" data-msg="convidar"></div>
       <div id="convite"></div>
-      <div class="pessoas" id="pessoas"><p class="ajuda">Carregando convidados…</p></div>
-    </section>` : ""}`;
+      <div id="pessoas"><p class="ajuda">Carregando convidados…</p></div>
+    </section>` : ""}
+    </main>`;
   if (dono) listarConvidados();
 }
 
@@ -403,8 +635,8 @@ async function listarConvidados() {
     const { convidados } = await convidar({ acao: "listar" });
     caixa.innerHTML = convidados.length ? convidados.map(c => `
       <div class="pessoa">
-        <div class="q">${esc(c.email)}<small>modelo ${esc(c.modelo === "video" ? "Vídeo" : c.modelo === "dados" ? "Dados" : "—")} · ${c.ultimo_acesso ? "último acesso " + haQuanto(c.ultimo_acesso) : "ainda não entrou"}</small></div>
-        <button class="btn" type="button" data-acao="nova_senha" data-id="${esc(c.user_id)}" data-email="${esc(c.email)}">Nova senha</button>
+        <div class="q">${esc(c.email)}<small>modelo ${esc(c.modelo === "video" ? "Vídeo" : c.modelo === "dados" ? "Dados" : "não definido")}, ${c.ultimo_acesso ? "último acesso " + haQuanto(c.ultimo_acesso) : "ainda não entrou"}</small></div>
+        <button class="btn" type="button" data-acao="nova_senha" data-id="${esc(c.user_id)}" data-email="${esc(c.email)}">Gerar nova senha</button>
       </div>`).join("") : `<p class="ajuda">Ninguém convidado ainda.</p>`;
   } catch (e) { caixa.innerHTML = `<p class="ajuda erro">Não consegui listar: ${esc(e.message)}</p>`; }
 }
@@ -415,8 +647,8 @@ function mostrarConvite(email, senha) {
     <div class="convite">${esc(texto)}</div>
     <div class="botoes"><button class="btn ouro" type="button" id="copiar">Copiar mensagem</button></div>`;
   document.getElementById("copiar").onclick = async () => {
-    try { await navigator.clipboard.writeText(texto); mensagem("convidar", "Mensagem copiada — cola no WhatsApp."); }
-    catch { mensagem("convidar", "Não consegui copiar sozinho: seleciona o texto acima.", true); }
+    try { await navigator.clipboard.writeText(texto); mensagem("convidar", "Mensagem copiada. Cole no WhatsApp."); }
+    catch { mensagem("convidar", "Não consegui copiar sozinho: selecione o texto acima.", true); }
   };
 }
 
@@ -466,18 +698,19 @@ app.addEventListener("click", async e => {
     if (estado.precisaRecarregar) { app.innerHTML = `<div class="carregando">Recalculando com o seu perfil…</div>`; await carregar(); estado.precisaRecarregar = false; }
     telaVagas(); window.scrollTo(0, 0); return;
   }
-  if (acao === "bloco") {
-    const id = b.closest(".bloco").dataset.bloco;
-    estado.abertos = estado.abertos.includes(id) ? estado.abertos.filter(x => x !== id) : [...estado.abertos, id];
-    gravar("radar_abertos", estado.abertos); b.closest(".bloco").classList.toggle("aberto"); return;
-  }
-  if (acao === "mais") { estado.mostrarTodas[b.closest(".bloco").dataset.bloco] = true; telaVagas(); return; }
-  if (acao === "vaga") {
-    const el = b.closest(".vaga");
-    el.classList.toggle("aberta");
-    if (el.classList.contains("aberta") && !el.querySelector(".detalhe").innerHTML) abrirDetalhe(el);
+  if (acao === "aba") { estado.aba = b.dataset.valor; gravar("radar_aba", estado.aba); telaVagas(); return; }
+  if (acao === "ordem") { estado.ordem = b.dataset.valor; gravar("radar_ordem", estado.ordem); telaVagas(); return; }
+  if (acao === "idioma") {
+    const anterior = idioma(), novo = b.dataset.valor;
+    if (novo === anterior) return;
+    estado.perfil = { ...estado.perfil, idioma_vagas: novo }; telaVagas();   // a tela responde na hora; o perfil grava em seguida
+    const { error } = await sb.from("perfil").update({ idioma_vagas: novo }).eq("user_id", estado.sessao.user.id);
+    if (error) { estado.perfil.idioma_vagas = anterior; telaVagas(); alert("Não consegui salvar a escolha de idioma: " + error.message); }
     return;
   }
+  if (acao === "mais") { estado.mostrarTodas[estado.aba] = true; telaVagas(); return; }
+  if (acao === "vaga") { selecionar(b.dataset.chave); return; }
+  if (acao === "fechar") { history.back(); return; }
   if (acao === "peso" || acao === "remover") {
     const termo = b.closest("[data-termo]").dataset.termo;
     const t = estado.termos.find(x => x.termo === termo);
@@ -494,10 +727,21 @@ app.addEventListener("click", async e => {
   }
 });
 
+// Setas para cima e para baixo andam pela lista (no computador o detalhe acompanha)
+app.addEventListener("keydown", e => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  const atual = e.target.closest?.(".linha-vaga"); if (!atual) return;
+  const linhas = [...document.querySelectorAll(".linha-vaga")];
+  const proxima = linhas[linhas.indexOf(atual) + (e.key === "ArrowDown" ? 1 : -1)];
+  if (!proxima) return;
+  e.preventDefault(); proxima.focus();
+  if (telaLarga.matches) selecionar(proxima.dataset.chave, false);
+});
+
 /*
   Sessão: tudo parte do aviso onAuthStateChange, que já entrega a sessão.
   Armadilha da supabase-js: chamar funções do auth (ex.: pegar a sessão) de dentro desse aviso
-  trava a fila interna do login — a página ficava parada em "Carregando…" depois do link do e-mail.
+  trava a fila interna do login; a página ficava parada em "Carregando…" depois do link do e-mail.
   Por isso: a sessão vem do próprio aviso, e o trabalho sai dele via setTimeout(…, 0).
 */
 let sessaoCarregada = null;

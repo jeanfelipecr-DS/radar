@@ -26,7 +26,7 @@ async function http(url: string, tentativas = 3): Promise<string> {
   for (let n = 1; ; n++) {
     try {
       const r = await fetch(url, { headers: { "User-Agent": UA } });
-      if (r.status >= 400 && r.status < 500) throw new Error(`GET ${url} -> ${r.status}`);   // erro nosso: não repete
+      if (r.status >= 400 && r.status < 500 && r.status !== 429) throw new Error(`GET ${url} -> ${r.status}`);   // erro nosso: não repete
       if (!r.ok) throw Object.assign(new Error(`GET ${url} -> ${r.status}`), { repetir: true });
       return await r.text();
     } catch (e) {
@@ -39,6 +39,54 @@ async function http(url: string, tentativas = 3): Promise<string> {
 // Datas da Mercor vêm sem fuso; o banco recebe sempre UTC explícito.
 const iso = (v: unknown) => !v ? null : /Z$|[+-]\d\d:\d\d$/.test(String(v)) ? String(v) : String(v) + "Z";
 const numero = (v: unknown) => v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v);
+
+// Título e descrição são gravados como TEXTO limpo: com "an&aacute;lise" no banco, o termo "análise"
+// do perfil não bate e a nota de encaixe sai errada.
+const ENTIDADES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ordm: "º", ordf: "ª", deg: "°", euro: "€",
+  ndash: "–", mdash: "—", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", bull: "•", middot: "·",
+  laquo: "«", raquo: "»", copy: "©", reg: "®", trade: "™", sup2: "²", sup3: "³", times: "×", iquest: "¿", iexcl: "¡",
+};
+const ACENTOS: Record<string, string> = { acute: "́", grave: "̀", circ: "̂", tilde: "̃", uml: "̈", cedil: "̧" };
+function decodificar(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (todo, n: string) => {
+    if (n[0] === "#") {
+      const cp = n[1].toLowerCase() === "x" ? parseInt(n.slice(2), 16) : parseInt(n.slice(1), 10);
+      try { return String.fromCodePoint(cp); } catch { return todo; }
+    }
+    if (n in ENTIDADES) return ENTIDADES[n];
+    const m = n.match(/^([a-z])(acute|grave|circ|tilde|uml|cedil)$/i);   // &ccedil; &Atilde; &eacute;…
+    return m ? (m[1] + ACENTOS[m[2]]).normalize("NFC") : todo;
+  });
+}
+function textoDeHtml(html: unknown): string | null {
+  if (html === null || html === undefined) return null;
+  const t = decodificar(String(html)
+    .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|h\d)>/gi, "\n").replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, ""))
+    .replace(/ /g, " ").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return t || null;
+}
+
+// Fontes com busca por PALAVRA (Freelancer, Workana, 99Freelas) buscam com as habilidades de TODOS
+// os perfis; a nota de encaixe de cada pessoa separa o que importa para ela.
+async function buscasDosPerfis(): Promise<string[]> {
+  const { data, error } = await sb.from("perfil_termo").select("rotulo").eq("tipo", "encaixe");
+  if (error) throw error;
+  const porChave = new Map<string, string>();
+  for (const r of data ?? []) {
+    const rotulo = String(r.rotulo ?? "").trim();
+    if (rotulo && !porChave.has(rotulo.toLowerCase())) porChave.set(rotulo.toLowerCase(), rotulo);
+  }
+  return [...porChave.values()];
+}
+
+const EM_PARALELO = 4;
+async function emParalelo<T, R>(itens: T[], fn: (x: T) => Promise<R>): Promise<R[]> {
+  const saida: R[] = [];
+  for (let i = 0; i < itens.length; i += EM_PARALELO) saida.push(...await Promise.all(itens.slice(i, i + EM_PARALELO).map(fn)));
+  return saida;
+}
 
 // ------------------------------------------------------------------ Mercor
 // Sem API pública: as vagas vêm num JSON (__NEXT_DATA__) dentro da página /explore.
@@ -70,6 +118,7 @@ async function mercor(): Promise<Par[]> {
       entrevista_falada: true,
       aceita_brasil: !ineleg.has("BRA") && (eleg.size === 0 || eleg.has("BRA")),
       publicada_em: iso(l.postedAt ?? l.createdAt),
+      idioma: "en", moeda: "USD", valor_min_original: numero(l.rateMin), valor_max_original: numero(l.rateMax),
     }];
   });
 }
@@ -106,6 +155,8 @@ async function braintrust(): Promise<Par[]> {
         entrevista_falada: null,   // não sabemos; a etiqueta só aparece quando é certeza
         aceita_brasil: locais.length === 0 || REGIOES_BRASIL.test(nomes),
         publicada_em: iso(j.created),
+        idioma: "en", moeda: "USD",
+        valor_min_original: numero(j.budget_minimum_usd), valor_max_original: numero(j.budget_maximum_usd),
       }]);
     }
     url = pagina.next ?? null;
@@ -119,7 +170,6 @@ async function braintrust(): Promise<Par[]> {
 // que importa. Orçamento vem em várias moedas, com a cotação para US$ no próprio projeto.
 // Projeto por hora com 30h+/semana segue a regra da Braintrust → bloco de mercado.
 const POR_BUSCA = 25;
-const EM_PARALELO = 4;
 
 // O JSON da Freelancer é quase todo campo nulo (~7 KB/projeto). Guardar sem os nulos não perde
 // informação e faz a fonte caber no plano grátis.
@@ -133,20 +183,15 @@ function semNulos(v: unknown): unknown {
 }
 
 async function freelancer(): Promise<Par[]> {
-  const { data, error } = await sb.from("perfil_termo").select("rotulo").eq("tipo", "encaixe");
-  if (error) throw error;
-  const buscas = [...new Set((data ?? []).map((r) => String(r.rotulo).trim()).filter(Boolean))];
   const porId = new Map<number, Record<string, unknown>>();
-  for (let i = 0; i < buscas.length; i += EM_PARALELO) {
-    const lote = buscas.slice(i, i + EM_PARALELO).map((termo) => http(
-      `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${encodeURIComponent(termo)}` +
-      `&limit=${POR_BUSCA}&job_details=true&full_description=true`));
-    for (const texto of await Promise.all(lote)) {
-      for (const p of JSON.parse(texto).result?.projects ?? []) porId.set(p.id, p);
-    }
+  const paginas = await emParalelo(await buscasDosPerfis(), (termo) => http(
+    `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${encodeURIComponent(termo)}` +
+    `&limit=${POR_BUSCA}&job_details=true&full_description=true`));
+  for (const texto of paginas) {
+    for (const p of JSON.parse(texto).result?.projects ?? []) porId.set(p.id, p);
   }
   return [...porId.values()].filter((p) => !p.local).map((p) => {
-    const moeda = p.currency as { exchange_rate?: number } | undefined;
+    const moeda = p.currency as { code?: string; exchange_rate?: number } | undefined;
     const taxa = Number(moeda?.exchange_rate) || null;
     const usd = (v: unknown) => v === null || v === undefined || !taxa ? null : Math.round(Number(v) * taxa * 100) / 100;
     const orc = (p.budget ?? {}) as { minimum?: number; maximum?: number };
@@ -169,11 +214,122 @@ async function freelancer(): Promise<Par[]> {
       entrevista_falada: null,
       aceita_brasil: true,          // projeto não-local da Freelancer é aberto a qualquer país
       publicada_em: p.time_submitted ? new Date(Number(p.time_submitted) * 1000).toISOString() : null,
+      idioma: p.language ?? null, moeda: moeda?.code ?? "USD",
+      valor_min_original: numero(orc.minimum), valor_max_original: numero(orc.maximum),
     }];
   });
 }
 
-const FONTES: Record<string, () => Promise<Par[]>> = { mercor, braintrust, freelancer };
+// ------------------------------------------------------------------ Workana (só projetos em português)
+// Sem API: a página pública /jobs traz as vagas num JSON dentro do atributo results-initials.
+// Busca por palavra com language=pt, 20 por página. Orçamento vem em texto ("USD 100 - 250",
+// "Menos de USD 50", "USD 15 - 45 / hora") e a data vem relativa ("há 5 dias"): o gatilho
+// vaga_manter_primeira_data guarda a 1ª leitura, que é a mais precisa.
+// Campos que só servem para a tela da Workana (botões, popover, link de login) não entram no bruto.
+const TELA_WORKANA = new Set(["freelancerAuthDialog", "popoverContent", "profileLogo", "infoImg", "onboardingRoute",
+  "inboxUrl", "dismissInvitationUrl", "showCta", "showDescription", "showMainDetails", "showSkills", "showSeeMoreLink",
+  "showReportProject", "isLogged", "hasContacted", "hasThread", "lastEmployerMessage", "isInvite", "url"]);
+
+function orcamentoEmTexto(txt: string, porHora: unknown) {
+  const t = txt.toLowerCase();
+  const moeda = /r\$|brl/.test(t) ? "BRL" : /eur|€/.test(t) ? "EUR" : /usd|us\$/.test(t) ? "USD" : null;
+  const nums = [...t.matchAll(/\d[\d.]*(?:,\d+)?/g)].map((m) => Number(m[0].replace(/\./g, "").replace(",", ".")));
+  let min: number | null = null, max: number | null = null;
+  if (/menos de|até/.test(t)) max = nums[0] ?? null;
+  else if (/mais de|acima/.test(t)) min = nums[0] ?? null;
+  else { min = nums[0] ?? null; max = nums[1] ?? nums[0] ?? null; }
+  return { moeda, min, max, hora: /\/\s*hora/.test(t) || porHora === true || porHora === "True" };
+}
+
+const MS: Record<string, number> = { minuto: 6e4, hora: 36e5, dia: 864e5, semana: 6048e5, mes: 2592e6, "mês": 2592e6, ano: 31536e6 };
+function dataRelativa(txt: unknown): string | null {
+  const t = String(txt ?? "").toLowerCase().replace(/\buma?\b/g, "1");
+  if (/agora/.test(t)) return new Date().toISOString();
+  if (/ontem/.test(t)) return new Date(Date.now() - MS.dia).toISOString();
+  const m = t.match(/(\d+)\s*(minuto|hora|dia|semana|mês|mes|ano)/);
+  return m ? new Date(Date.now() - Number(m[1]) * MS[m[2]]).toISOString() : null;
+}
+
+async function workana(): Promise<Par[]> {
+  const porSlug = new Map<string, Record<string, unknown>>();
+  const paginas = await emParalelo(await buscasDosPerfis(), (termo) =>
+    http(`https://www.workana.com/jobs?language=pt&query=${encodeURIComponent(termo)}`));
+  for (const html of paginas) {
+    const m = html.match(/results-initials='([^']*)'/) ?? html.match(/results-initials="([^"]*)"/);
+    if (!m) throw new Error("Workana: results-initials não encontrado (a página mudou de formato)");
+    for (const r of JSON.parse(decodificar(m[1])).results ?? []) if (r?.slug) porSlug.set(String(r.slug), r);
+  }
+  return [...porSlug.values()].map((r) => {
+    const bruto = Object.fromEntries(Object.entries(r).filter(([k]) => !TELA_WORKANA.has(k)));
+    const orc = orcamentoEmTexto(String(r.budget ?? ""), r.isHourly);
+    const emDolar = orc.moeda === "USD";
+    // o texto do link vem cortado ("…Excel e ..."); o título inteiro está no atributo title
+    const titulo = String(r.title ?? "").match(/<span title="([^"]*)"/)?.[1];
+    // a descrição traz "Categoria: <strong>TI e Programação</strong> · Subcategoria: <strong>Data Science</strong>"
+    const campo = (nome: string) => String(r.description ?? "").match(new RegExp(`\\b${nome}:\\s*<strong>([^<]+)</strong>`))?.[1];
+    return [bruto, {
+      fonte: "workana", id_externo: String(r.slug), titulo: textoDeHtml(titulo ?? r.title), empresa: null,
+      url: `https://www.workana.com/job/${r.slug}`,
+      descricao: textoDeHtml(r.description), area: textoDeHtml(campo("Subcategoria") ?? campo("Categoria") ?? null),
+      habilidades: ((r.skills ?? []) as { anchorText?: string }[]).map((x) => x?.anchorText).filter(Boolean).map((x) => decodificar(String(x))),
+      compromisso: orc.hora ? "hourly" : "fixed",
+      tipo: "freela", prazo: "semanas",
+      valor_min: emDolar ? orc.min : null, valor_max: emDolar ? orc.max : null,   // outra moeda: sem cotação, sem US$
+      unidade: orc.hora ? "hora" : "projeto",
+      horas_semana: null, entrevista_falada: null, aceita_brasil: true,
+      publicada_em: dataRelativa(r.postedDate),
+      idioma: "pt", moeda: orc.moeda ?? "USD", valor_min_original: orc.min, valor_max_original: orc.max,
+    }];
+  });
+}
+
+// ------------------------------------------------------------------ 99Freelas
+// Sem API e sem JSON: lê o HTML da busca (10 por página). O orçamento é "Aberto" em todo projeto
+// conferido (14 de 14 em 13/10/2026): quem propõe o preço é o freelancer, então a vaga fica sem valor.
+// Projeto "exclusivo" fica só para assinantes nas primeiras 24 h.
+function projetos99(html: string): Record<string, unknown>[] {
+  const saida: Record<string, unknown>[] = [];
+  const re = /<li class="[^"]*result-item[^"]*"[^>]*data-id="(\d+)"[^>]*>/g;
+  for (let m; (m = re.exec(html));) {
+    const fim = html.indexOf("</li>", re.lastIndex);
+    const b = html.slice(re.lastIndex, fim < 0 ? undefined : fim);
+    const link = b.match(/<h1 class="title"[^>]*>\s*<a[^>]*href="(\/project\/[^"?]+)[^"]*"[^>]*>([\s\S]*?)<\/a>/);
+    if (!link) continue;
+    const info = b.match(/<p class="item-text information">([\s\S]*?)(?:<\/p>|<\/hgroup>)/)?.[1] ?? "";
+    const [categoria, nivel] = (textoDeHtml(info.split(/Publicado:/)[0]) ?? "").split("|").map((x) => x.trim()).filter(Boolean);
+    const inteiro = (r: RegExp) => numero(b.match(r)?.[1]);
+    saida.push({
+      id: m[1], caminho: link[1], titulo: textoDeHtml(link[2]), categoria: categoria ?? null, nivel: nivel ?? null,
+      publicado_ms: inteiro(/class="datetime"[^>]*cp-datetime="(\d+)"/), termina_ms: inteiro(/class="datetime-restante"[^>]*cp-datetime="(\d+)"/),
+      propostas: inteiro(/Propostas:\s*<b>(\d+)/), interessados: inteiro(/Interessados:\s*<b>(\d+)/),
+      descricao: textoDeHtml(b.match(/data-content="([^"]*)"/)?.[1]),
+      habilidades: [...b.matchAll(/<a class="habilidade"[^>]*>([\s\S]*?)<\/a>/g)].map((x) => textoDeHtml(x[1])).filter(Boolean),
+      cliente_nota: numero(b.match(/data-score="([\d.]+)"/)?.[1]), cliente_avaliacoes: inteiro(/\(\s*(\d+)\s+avalia/),
+      exclusivo: /projeto exclusivo/i.test(b),
+    });
+  }
+  return saida;
+}
+
+async function noventaENove(): Promise<Par[]> {
+  const porId = new Map<string, Record<string, unknown>>();
+  const paginas = await emParalelo(await buscasDosPerfis(), (termo) =>
+    http(`https://www.99freelas.com.br/projects?q=${encodeURIComponent(termo)}`));
+  for (const html of paginas) for (const p of projetos99(html)) porId.set(String(p.id), p);
+  if (!porId.size) throw new Error(`99Freelas: nenhum projeto em ${paginas.length} buscas (a página mudou de formato?)`);
+  return [...porId.values()].map((p) => [p, {
+    fonte: "99freelas", id_externo: String(p.id), titulo: p.titulo, empresa: null,
+    url: `https://www.99freelas.com.br${p.caminho}`,
+    descricao: p.descricao, area: p.categoria, habilidades: p.habilidades, compromisso: p.nivel,
+    tipo: "freela", prazo: "semanas",
+    valor_min: null, valor_max: null, unidade: "projeto",
+    horas_semana: null, entrevista_falada: null, aceita_brasil: true,
+    publicada_em: p.publicado_ms ? new Date(Number(p.publicado_ms)).toISOString() : null,
+    idioma: "pt", moeda: "BRL", valor_min_original: null, valor_max_original: null,
+  }]);
+}
+
+const FONTES: Record<string, () => Promise<Par[]>> = { mercor, braintrust, freelancer, workana, "99freelas": noventaENove };
 
 // ------------------------------------------------------------------ versão bruta
 // Contadores que mudam a toda hora sem a vaga mudar ficam FORA do hash — senão cada coleta
@@ -183,6 +339,8 @@ const VOLATEIS: Record<string, Set<string>> = {
     "userSimilarityScore", "isMostRecent", "isRecommended", "applicationStepsCompleted", "applicationStepsPending", "submittedOn"]),
   braintrust: new Set(["openings_left"]),
   freelancer: new Set(["bid_stats", "time_updated", "time_free_bids_expire"]),
+  workana: new Set(["postedDate", "publishedDate", "totalBids", "isSearchFeatured"]),
+  "99freelas": new Set(["propostas", "interessados", "exclusivo"]),
 };
 
 // Mesmo texto que o json.dumps(sort_keys=True, ensure_ascii=False) do coletor Python antigo:
