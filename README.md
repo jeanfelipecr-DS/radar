@@ -9,14 +9,16 @@ As boas vagas de dados para freelancer ficam espalhadas por várias plataformas,
 ## Como funciona
 
 ```
-GitHub Actions (de hora em hora)
-  └─ coletor/coletar.py ── busca Mercor + Braintrust
-        └─ Supabase
+pg_cron no banco (de hora em hora, minuto 17)
+  └─ pg_net chama a função `coletar` (Supabase Edge Function, TypeScript)
+        └─ busca Mercor + Braintrust e grava
              ├─ coleta       uma linha por execução (frescor de cada fonte)
              ├─ vaga_bruta   o JSON como a fonte mandou (versão nova só quando muda)
              ├─ vaga         a vaga organizada
              └─ vaga_aberta  view: "aberta" é calculado, nunca gravado
 ```
+
+O agendamento mora no banco porque o agendador do GitHub Actions é "best-effort": no repositório novo ele perdeu os primeiros horários sem rodar nenhuma vez. A primeira versão do coletor (Python + GitHub Actions) está no histórico do git.
 
 **Tela** (parte 2): <https://jeanfelipecr-ds.github.io/radar/> — login por link no e-mail (cadastro fechado: só o dono entra), vagas abertas que aceitam Brasil ranqueadas pela nota de **encaixe** (0–100), separadas por tempo até o primeiro dinheiro (dias · semanas · meses) e um bloco à parte com vagas de tempo integral, só para ler o mercado.
 
@@ -33,21 +35,24 @@ A chave que aparece no `index.html` é a pública (papel `anon`). Ela sozinha n�
 
 Upwork, Malt, Outlier, Toptal e outras não entregam vagas de forma automática; entram como link e registro manual da candidatura.
 
-## Rodar
+## Publicar e rodar
 
 ```bash
-python coletor/coletar.py --seco                 # busca e salva em saida/, não grava no banco
-python coletor/coletar.py                        # grava no Supabase
-python coletor/coletar.py --seco --fonte mercor  # uma fonte só
+# publicar a função (precisa do token de conta em SUPABASE_ACCESS_TOKEN)
+curl -X POST -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"   "https://api.supabase.com/v1/projects/<ref>/functions/deploy?slug=coletar"   -F 'metadata={"entrypoint_path":"index.ts","name":"coletar","verify_jwt":false};type=application/json'   -F "file=@supabase/functions/coletar/index.ts;filename=index.ts"
+
+# rodar na mão
+curl -X POST "https://<ref>.supabase.co/functions/v1/coletar" -H "x-radar-segredo: $RADAR_SEGREDO"
 ```
 
-Para gravar, o coletor precisa de `SUPABASE_URL` e `SUPABASE_SERVICE_KEY` (no GitHub, em *Settings → Secrets → Actions*). Sem dependências além da biblioteca padrão do Python.
+A função não exige JWT: ela confere o cabeçalho `x-radar-segredo`, cujo valor fica nos segredos da função (`RADAR_SEGREDO`) e no cofre do banco (`radar_segredo`, lido pelo `pg_cron`).
 
 ## Armadilhas
 
 - **A Mercor não tem API.** Se a página mudar de formato, a coleta falha com erro explícito e a tela mostra a fonte como atrasada. As vagas da última coleta boa continuam visíveis.
-- **O GitHub desliga agendamentos** de repositório público depois de 60 dias sem commit. Se o Radar parar de atualizar, reative o workflow em *Actions*.
-- **Contadores voláteis ficam fora do hash** da versão bruta (`VOLATEIS` no coletor). Sem isso, cada coleta gravaria uma versão nova de quase toda vaga e o plano grátis do Supabase lotaria em semanas.
+- **Horas significam coisas diferentes em cada fonte.** Na Mercor o número é o teto (paga por hora; vaga "full-time" vai para o bloco de mercado). Na Braintrust são as horas esperadas, e 30h ou mais vai para o bloco de mercado.
+- **A Braintrust devolve `job_skills` em ordem aleatória.** A lista é ordenada só para o hash da versão bruta; sem isso, cada coleta gravava versões falsas.
+- **Contadores voláteis ficam fora do hash** da versão bruta (`VOLATEIS` na função). Sem isso, cada coleta gravaria uma versão nova de quase toda vaga e o plano grátis do Supabase lotaria em semanas.
 - **Vaga não é apagada** quando some da fonte. Ela sai da view `vaga_aberta` e fica como histórico.
 
 ---

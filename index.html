@@ -177,7 +177,7 @@ async function carregar() {
 /* ------------------------------------------------------------ tela */
 function linhaVaga(v) {
   const n = v.encaixe >= 75 ? "n75" : v.encaixe >= 50 ? "n50" : "";
-  const partes = [valor(v) ? `<b>${esc(valor(v))}</b>` : null, v.horas_semana ? `até ${v.horas_semana}h/sem` : null, v.fonte === "mercor" ? "Mercor" : "Braintrust"].filter(Boolean);
+  const partes = [valor(v) ? `<b>${esc(valor(v))}</b>` : null, v.horas_semana ? (v.fonte === "mercor" ? `teto ${v.horas_semana}h/sem` : `espera ${v.horas_semana}h/sem`) : null, v.fonte === "mercor" ? "Mercor" : "Braintrust"].filter(Boolean);
   return `
     <div class="vaga" data-chave="${esc(v.fonte + ":" + v.id_externo)}">
       <button type="button" data-acao="vaga">
