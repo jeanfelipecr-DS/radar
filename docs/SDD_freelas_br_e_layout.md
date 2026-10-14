@@ -122,3 +122,27 @@ celular: mesma ordem em uma coluna; tocar na vaga abre o detalhe por cima, "Volt
 - O teste de tela passou a rodar pelo protocolo de depuração do Edge (Node puro, sem Playwright): clica, troca de largura e lê os erros do console.
 
 **Riscos que ficam:** Workana e 99Freelas não têm API; se a página mudar, a coleta da fonte falha com erro explícito e a tela mostra a fonte como atrasada. Cada habilidade nova de qualquer perfil vira mais uma busca em 3 fontes (hoje ~30 buscas por fonte, 30 s no total).
+
+## 8. Ajuste de 14/10/2026: vaga velha e idiomas misturados
+
+**O que o Jean viu:** "tá bem confusa, tá filtrando como? por data? o projeto ainda tá aberto? tem projeto lá de 2, 3 meses".
+
+**O que estava acontecendo (medido):**
+- A lista ordena por **encaixe**, depois por valor. A data não entrava na ordem e só aparecia no detalhe.
+- "Aberta" no Radar = a plataforma ainda lista a vaga. Cada uma fecha de um jeito: o 99Freelas fecha sozinho em 30 dias; a **Workana deixa o projeto "Aberto" até o cliente fechar** (um de BigQuery publicado em 09/03 seguia "Aberto" em 14/10, com 0 propostas; 21 de 140 tinham mais de 30 dias); a Freelancer tinha 1 projeto de 2024 ainda "ativo"; a **Mercor mantém redes de especialistas abertas por meses de propósito** (97 de 211 com mais de 30 dias).
+
+| # | Decisão do Jean |
+|---|---|
+| Q15 | Projeto de cliente (Workana, Freelancer, 99Freelas) com **mais de 30 dias some** (mesma régua do 99Freelas). |
+| Q16 | Ordem continua por **encaixe**, com a **idade em cada linha** ("há 5 dias"); a ordem ganha a opção **recentes**. |
+| Q17 | Rede contínua da Mercor **fica**, com a etiqueta **"vaga contínua"** e uma linha no detalhe explicando. |
+| Q18 | O que mais confundiu: **inglês e português misturados** → em "Todas", a lista separa **Em português** (primeiro) e **Em inglês**. |
+
+**Feito:** `0006_vaga_antiga_e_continua.sql` (view `vaga_radar` ganha `antiga` e `continua`; regra calculada, nada gravado) e `index.html`.
+
+**Conferido (14/10):**
+- Somem 22 projetos antigos (21 da Workana, 1 da Freelancer); a barra diz "22 projetos com mais de 30 dias escondidos".
+- 90 vagas da Mercor ganham "vaga contínua" (ex.: Business Intelligence Analyst Talent Network, publicada há 8 meses).
+- Semanas em "Todas": bloco Em português (140) e bloco Em inglês e outras línguas (120); por valor, as unidades ficam dentro de cada bloco.
+- Recentes: a primeira linha é de 47 minutos atrás.
+- 0 erros de JavaScript em 1440 px e 390 px; o idioma do Jean voltou para Português, como ele tinha deixado.

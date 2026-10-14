@@ -89,6 +89,9 @@
   .fala svg { width: 12px; height: 12px; }
   .grupo { padding: 16px 16px 6px; font-size: 13px; font-weight: 600; color: var(--texto); border-bottom: 1px solid var(--linha); }
   .grupo small { font-weight: 500; color: var(--suave); margin-left: 6px; }
+  .grupo.idioma { padding-top: 20px; font-size: 14px; color: var(--forte); background: var(--fundo); }
+  .subgrupo { padding: 10px 16px 6px; font-size: 12.5px; font-weight: 500; color: var(--suave); border-bottom: 1px solid var(--linha); }
+  .continua { color: var(--texto); border: 1px solid var(--linha2); padding: 0 7px; border-radius: 999px; font-size: 11.5px; }
   .vazio { padding: 28px 16px; font-size: 14px; color: var(--suave); max-width: 52ch; }
   .vazio button { color: var(--ouro-claro); text-decoration: underline; text-underline-offset: 3px; }
   .mais { width: 100%; padding: 16px; font-size: 13px; color: var(--suave); }
@@ -323,7 +326,7 @@ function telaLogin(msg = "", erro = false) {
 // em ordem fixa (fonte, id), senão uma vaga podia sair em duas páginas ou em nenhuma.
 async function lerVagas() {
   const campos = "fonte,id_externo,titulo,empresa,url,area,habilidades,tipo,prazo,valor_min,valor_max,unidade,horas_semana," +
-                 "entrevista_falada,publicada_em,encaixe,termos,nova,abaixo_minimo,idioma,moeda,valor_min_original,valor_max_original";
+                 "entrevista_falada,publicada_em,primeira_vez_em,encaixe,termos,nova,abaixo_minimo,idioma,moeda,valor_min_original,valor_max_original,antiga,continua";
   const todas = [];
   for (let de = 0; ; de += 1000) {
     const { data, error } = await sb.from("vaga_radar").select(campos).eq("aceita_brasil", true).eq("escondida", false)
@@ -346,21 +349,27 @@ async function carregar() {
 }
 const idioma = () => estado.perfil?.idioma_vagas || "todos";
 
-// O que a pessoa vê: sem as abaixo do valor mínimo e, no modo Português, só vaga em português
+// O que a pessoa vê: sem projeto de cliente com mais de 30 dias (view, 0006), sem as abaixo do
+// valor mínimo e, no modo Português, só vaga em português
+const disponivel = v => !v.antiga && !v.abaixo_minimo;
 function visiveis() {
-  return estado.vagas.filter(v => !v.abaixo_minimo && (idioma() === "todos" || v.idioma === "pt"));
+  return estado.vagas.filter(v => disponivel(v) && (idioma() === "todos" || v.idioma === "pt"));
 }
+// Em "Todas", português vem num bloco e inglês em outro (misturados confundiam: decisão do Jean, 14/10)
+const blocoIdioma = v => idioma() === "todos" ? (v.idioma === "pt" ? 0 : 1) : 0;
+// Por valor: US$ 50 por hora e US$ 500 pelo projeto não se comparam, então cada unidade é um grupo
+const grupoValor = v => usd(v) == null ? null : v.unidade;
+const posValor = v => usd(v) == null ? GRUPOS.length - 1 : Math.max(0, GRUPOS.findIndex(([g]) => g === v.unidade));
+const dataDe = v => v.publicada_em || v.primeira_vez_em || "";
 function ordenar(vs) {
-  const porEncaixe = (a, b) => b.encaixe - a.encaixe || (usd(b) ?? -1) - (usd(a) ?? -1) || String(b.publicada_em).localeCompare(String(a.publicada_em));
-  if (estado.ordem !== "valor") return [...vs].sort(porEncaixe);
-  // Por valor: US$ 50 por hora e US$ 500 pelo projeto não se comparam, então cada unidade é um grupo
-  return [...vs].sort((a, b) => {
-    const ga = usd(a) == null ? GRUPOS.length - 1 : Math.max(0, GRUPOS.findIndex(([g]) => g === a.unidade));
-    const gb = usd(b) == null ? GRUPOS.length - 1 : Math.max(0, GRUPOS.findIndex(([g]) => g === b.unidade));
-    return ga - gb || (usd(b) ?? -1) - (usd(a) ?? -1) || b.encaixe - a.encaixe;
-  });
+  const porEncaixe = (a, b) => b.encaixe - a.encaixe || (usd(b) ?? -1) - (usd(a) ?? -1) || String(dataDe(b)).localeCompare(String(dataDe(a)));
+  const porData = (a, b) => String(dataDe(b)).localeCompare(String(dataDe(a))) || b.encaixe - a.encaixe;
+  const porValor = (a, b) => posValor(a) - posValor(b) || (usd(b) ?? -1) - (usd(a) ?? -1) || b.encaixe - a.encaixe;
+  const modo = estado.ordem === "valor" ? porValor : estado.ordem === "recentes" ? porData : porEncaixe;
+  return [...vs].sort((a, b) => blocoIdioma(a) - blocoIdioma(b) || modo(a, b));
 }
-const grupoDe = v => usd(v) == null ? null : v.unidade;
+// idade na linha: "há 3 dias"; rede contínua da Mercor diz o que é em vez de "há 8 meses"
+const idade = v => v.continua ? null : v.publicada_em ? haQuanto(v.publicada_em) : null;
 
 /* ------------------------------------------------------------ topo */
 function topo() {
@@ -391,8 +400,10 @@ function linhaVaga(v) {
         <span class="titulo">${esc(v.titulo)}</span>
         <span class="meta">
           ${valor ? `<b>${esc(valor.curto)}</b>` : ""}
+          ${idade(v) ? `<span>${esc(idade(v))}</span>` : ""}
           ${h ? `<span>${esc(h)}</span>` : ""}
           <span>${esc(FONTE[v.fonte]?.nome || v.fonte)}</span>
+          ${v.continua ? '<span class="continua">vaga contínua</span>' : ""}
           ${v.nova ? '<span class="nova">nova</span>' : ""}
           ${v.entrevista_falada ? `<span class="fala">${MIC}entrevista falada</span>` : ""}
         </span>
@@ -405,16 +416,22 @@ function listaDaAba(aba, vs) {
   const mostrar = ordenar(estado.mostrarTodas[aba.id] ? vs : comEncaixe);
   const resto = vs.length - comEncaixe.length;
   if (!vs.length) {
-    const emOutraLingua = idioma() === "pt" ? estado.vagas.filter(v => !v.abaixo_minimo && aba.filtro(v)).length : 0;
+    const emOutraLingua = idioma() === "pt" ? estado.vagas.filter(v => disponivel(v) && aba.filtro(v)).length : 0;
     if (emOutraLingua) return `<p class="vazio">Nenhuma vaga em português nesta aba. Há ${emOutraLingua} em outras línguas. <button type="button" data-acao="idioma" data-valor="todos">Mostrar todas</button></p>`;
     return `<p class="vazio">${esc(aba.vazio || "Nada por enquanto.")}</p>`;
   }
-  let html = "", grupo;
+  let html = "", bloco, grupo;
+  const outras = mostrar.filter(v => blocoIdioma(v) === 1);
+  const nomeOutras = outras.every(v => v.idioma === "en") ? "Em inglês" : "Em inglês e outras línguas";
   for (const v of mostrar) {
-    if (estado.ordem === "valor" && grupoDe(v) !== grupo) {
-      grupo = grupoDe(v);
+    if (idioma() === "todos" && blocoIdioma(v) !== bloco) {
+      bloco = blocoIdioma(v); grupo = undefined;
+      html += `<p class="grupo idioma">${bloco === 0 ? "Em português" : nomeOutras}<small>${mostrar.filter(x => blocoIdioma(x) === bloco).length}</small></p>`;
+    }
+    if (estado.ordem === "valor" && grupoValor(v) !== grupo) {
+      grupo = grupoValor(v);
       const nome = GRUPOS.find(([g]) => g === grupo)?.[1] || "Outros";
-      html += `<p class="grupo">${nome}<small>${mostrar.filter(x => grupoDe(x) === grupo).length}</small></p>`;
+      html += `<p class="subgrupo">${nome}<small> ${mostrar.filter(x => blocoIdioma(x) === blocoIdioma(v) && grupoValor(x) === grupo).length}</small></p>`;
     }
     html += linhaVaga(v);
   }
@@ -427,7 +444,8 @@ function telaVagas() {
   const vs = visiveis();
   const aba = ABAS.find(a => a.id === estado.aba) || ABAS[0];
   const daAba = vs.filter(aba.filtro);
-  const escondidas = estado.vagas.filter(v => v.abaixo_minimo).length;
+  const escondidas = estado.vagas.filter(v => !v.antiga && v.abaixo_minimo).length;
+  const antigas = estado.vagas.filter(v => v.antiga && aba.filtro(v) && (idioma() === "todos" || v.idioma === "pt")).length;
   const novas = vs.filter(v => v.tipo === "freela" && v.nova && v.encaixe >= 50).length;
   const visiveisNaLista = ordenar(estado.mostrarTodas[aba.id] ? daAba : daAba.filter(v => v.encaixe > 0));
   // no computador o detalhe nunca fica vazio: sem seleção na lista, abre a primeira
@@ -435,6 +453,7 @@ function telaVagas() {
   const resumo = [
     novas ? `<b>${novas}</b> ${novas === 1 ? "nova" : "novas"} no seu perfil nas últimas 24 h` : "",
     escondidas ? `${escondidas} escondidas pelo valor mínimo de ${esc(dinheiro(estado.perfil?.valor_min_usd))}` : "",
+    antigas ? `${antigas} ${antigas === 1 ? "projeto com mais de 30 dias escondido" : "projetos com mais de 30 dias escondidos"}` : "",
   ].filter(Boolean).join(". ");
   app.innerHTML = `
     <div class="tela-vagas">
@@ -450,7 +469,8 @@ function telaVagas() {
         </div>
         <div class="seg" role="group" aria-label="Ordenar">
           <span><span class="longo">Ordenar por</span><span class="curto">Ordem</span></span>
-          <button type="button" data-acao="ordem" data-valor="encaixe" aria-pressed="${estado.ordem !== "valor"}">encaixe</button>
+          <button type="button" data-acao="ordem" data-valor="encaixe" aria-pressed="${!["valor", "recentes"].includes(estado.ordem)}">encaixe</button>
+          <button type="button" data-acao="ordem" data-valor="recentes" aria-pressed="${estado.ordem === "recentes"}">recentes</button>
           <button type="button" data-acao="ordem" data-valor="valor" aria-pressed="${estado.ordem === "valor"}">valor</button>
         </div>
         ${resumo ? `<p class="resumo">${resumo}.</p>` : ""}
@@ -477,6 +497,7 @@ function detalheHtml(v) {
     <article class="vaga-det">
       <h2>${esc(v.titulo)}</h2>
       <p class="origem"><b>${esc(f.nome)}</b>${v.empresa ? `<span>${esc(v.empresa)}</span>` : ""}${v.publicada_em ? `<span>publicada ${haQuanto(v.publicada_em)}</span>` : ""}${IDIOMA[v.idioma] ? `<span>${IDIOMA[v.idioma]}</span>` : ""}</p>
+      ${v.continua ? `<p class="fraco" style="margin-top:8px">Vaga contínua: a Mercor mantém esta vaga aberta por meses para formar uma rede de especialistas. Continua recebendo candidatos.</p>` : ""}
       <div class="placar">
         ${anel(v.encaixe, true)}
         <div class="preco">${valor ? `<b>${esc(valor.texto)}</b><small>${esc(valor.unidade)}${valor.emDolar ? `, ${esc(valor.emDolar)}` : ""}</small>` : semValor}</div>
