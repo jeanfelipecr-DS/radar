@@ -56,6 +56,15 @@
   .seg button { font-size: 13px; padding: 5px 11px; border-radius: 7px; color: var(--suave); }
   .seg button[aria-pressed="true"] { background: #221F18; color: var(--forte); font-weight: 600; }
   .barra .resumo { font-size: 12.5px; color: var(--suave); margin-left: auto; }
+  .fontes-btn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--linha2); border-radius: 9px; padding: 6px 11px; font-size: 13px; color: var(--suave); }
+  .fontes-btn b { color: var(--forte); font-weight: 600; }
+  .fontes-btn[aria-expanded="true"] { background: #221F18; color: var(--forte); }
+  .painel-fontes { flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .painel-fontes p { flex: 1 1 100%; font-size: 12.5px; color: var(--suave); }
+  .painel-fontes label { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--linha2); border-radius: 999px; padding: 6px 13px 6px 10px; font-size: 13.5px; cursor: pointer; }
+  .painel-fontes label.fora { color: var(--suave); border-style: dashed; }
+  .painel-fontes input { accent-color: var(--ouro); width: 16px; height: 16px; margin: 0; }
+  .painel-fontes small { color: var(--suave); font-variant-numeric: tabular-nums; }
   .barra .resumo b { color: var(--ouro-claro); font-weight: 600; }
 
   /* ---------------------------------------------------------------- anel de encaixe (a assinatura do Radar) */
@@ -340,7 +349,7 @@ async function carregar() {
   const [vagas, f, p, t] = await Promise.all([
     lerVagas(),
     sb.from("frescor_fonte").select("*"),
-    sb.from("perfil").select("user_id,nome,modelo,valor_min_usd,idioma_vagas").maybeSingle(),
+    sb.from("perfil").select("user_id,nome,modelo,valor_min_usd,idioma_vagas,fontes_ocultas").maybeSingle(),
     sb.from("perfil_termo").select("termo,rotulo,peso,tipo").order("tipo").order("peso", { ascending: false }).order("rotulo"),
   ]);
   const erro = f.error || p.error || t.error;
@@ -352,8 +361,12 @@ const idioma = () => estado.perfil?.idioma_vagas || "todos";
 // O que a pessoa vê: sem projeto de cliente com mais de 30 dias (view, 0006), sem as abaixo do
 // valor mínimo e, no modo Português, só vaga em português
 const disponivel = v => !v.antiga && !v.abaixo_minimo;
+const noIdioma = v => idioma() === "todos" || v.idioma === "pt";
+// Plataformas escondidas pela pessoa (0007): o perfil guarda as ESCONDIDAS, então fonte nova aparece sozinha
+const ocultas = () => estado.perfil?.fontes_ocultas || [];
+const naPlataforma = v => !ocultas().includes(v.fonte);
 function visiveis() {
-  return estado.vagas.filter(v => disponivel(v) && (idioma() === "todos" || v.idioma === "pt"));
+  return estado.vagas.filter(v => disponivel(v) && noIdioma(v) && naPlataforma(v));
 }
 // Em "Todas", português vem num bloco e inglês em outro (misturados confundiam: decisão do Jean, 14/10)
 const blocoIdioma = v => idioma() === "todos" ? (v.idioma === "pt" ? 0 : 1) : 0;
@@ -416,7 +429,9 @@ function listaDaAba(aba, vs) {
   const mostrar = ordenar(estado.mostrarTodas[aba.id] ? vs : comEncaixe);
   const resto = vs.length - comEncaixe.length;
   if (!vs.length) {
-    const emOutraLingua = idioma() === "pt" ? estado.vagas.filter(v => disponivel(v) && aba.filtro(v)).length : 0;
+    const emOutraLingua = idioma() === "pt" ? estado.vagas.filter(v => disponivel(v) && aba.filtro(v) && naPlataforma(v)).length : 0;
+    const emEscondidas = estado.vagas.filter(v => disponivel(v) && aba.filtro(v) && noIdioma(v) && !naPlataforma(v)).length;
+    if (emEscondidas) return `<p class="vazio">As ${emEscondidas} vagas desta aba são de plataformas que você escondeu. <button type="button" data-acao="fontes">Escolher plataformas</button></p>`;
     if (emOutraLingua) return `<p class="vazio">Nenhuma vaga em português nesta aba. Há ${emOutraLingua} em outras línguas. <button type="button" data-acao="idioma" data-valor="todos">Mostrar todas</button></p>`;
     return `<p class="vazio">${esc(aba.vazio || "Nada por enquanto.")}</p>`;
   }
@@ -445,7 +460,10 @@ function telaVagas() {
   const aba = ABAS.find(a => a.id === estado.aba) || ABAS[0];
   const daAba = vs.filter(aba.filtro);
   const escondidas = estado.vagas.filter(v => !v.antiga && v.abaixo_minimo).length;
-  const antigas = estado.vagas.filter(v => v.antiga && aba.filtro(v) && (idioma() === "todos" || v.idioma === "pt")).length;
+  const antigas = estado.vagas.filter(v => v.antiga && aba.filtro(v) && noIdioma(v) && naPlataforma(v)).length;
+  const fontes = Object.keys(FONTE);
+  const marcadas = fontes.filter(f => !ocultas().includes(f)).length;
+  const porFonte = f => estado.vagas.filter(v => v.fonte === f && disponivel(v) && noIdioma(v) && v.encaixe > 0).length;
   const novas = vs.filter(v => v.tipo === "freela" && v.nova && v.encaixe >= 50).length;
   const visiveisNaLista = ordenar(estado.mostrarTodas[aba.id] ? daAba : daAba.filter(v => v.encaixe > 0));
   // no computador o detalhe nunca fica vazio: sem seleção na lista, abre a primeira
@@ -473,6 +491,11 @@ function telaVagas() {
           <button type="button" data-acao="ordem" data-valor="recentes" aria-pressed="${estado.ordem === "recentes"}">recentes</button>
           <button type="button" data-acao="ordem" data-valor="valor" aria-pressed="${estado.ordem === "valor"}">valor</button>
         </div>
+        <button type="button" class="fontes-btn" data-acao="fontes" aria-expanded="${!!estado.fontesAbertas}" aria-controls="painel-fontes">Plataformas <b>${marcadas === fontes.length ? "todas" : `${marcadas} de ${fontes.length}`}</b></button>
+        ${estado.fontesAbertas ? `<div class="painel-fontes" id="painel-fontes" role="group" aria-label="Plataformas">
+          <p>Desmarque a plataforma em que você ainda não consegue se candidatar. A escolha fica salva no seu perfil.</p>
+          ${fontes.map(f => `<label class="${ocultas().includes(f) ? "fora" : ""}"><input type="checkbox" data-fonte="${f}"${ocultas().includes(f) ? "" : " checked"}>${esc(FONTE[f].nome)}<small>${porFonte(f)}</small></label>`).join("")}
+        </div>` : ""}
         ${resumo ? `<p class="resumo">${resumo}.</p>` : ""}
       </div>
       <div class="area">
@@ -725,10 +748,10 @@ app.addEventListener("click", async e => {
     const anterior = idioma(), novo = b.dataset.valor;
     if (novo === anterior) return;
     estado.perfil = { ...estado.perfil, idioma_vagas: novo }; telaVagas();   // a tela responde na hora; o perfil grava em seguida
-    const { error } = await sb.from("perfil").update({ idioma_vagas: novo }).eq("user_id", estado.sessao.user.id);
-    if (error) { estado.perfil.idioma_vagas = anterior; telaVagas(); alert("Não consegui salvar a escolha de idioma: " + error.message); }
+    gravarPerfil("idioma_vagas", "a escolha de idioma");
     return;
   }
+  if (acao === "fontes") { estado.fontesAbertas = !estado.fontesAbertas; telaVagas(); document.querySelector('[data-acao="fontes"].fontes-btn')?.focus(); return; }
   if (acao === "mais") { estado.mostrarTodas[estado.aba] = true; telaVagas(); return; }
   if (acao === "vaga") { selecionar(b.dataset.chave); return; }
   if (acao === "fechar") { history.back(); return; }
@@ -746,6 +769,26 @@ app.addEventListener("click", async e => {
     try { const r = await convidar({ acao: "nova_senha", user_id: b.dataset.id }); mostrarConvite(r.email, r.senha); mensagem("convidar", "Senha nova gerada."); }
     catch (err) { mensagem("convidar", err.message, true); }
   }
+});
+
+// Gravações do perfil saem em FILA e levam o valor do momento em que saem. Sem a fila, três
+// cliques rápidos mandavam três pedidos juntos e o último a chegar ao banco nem sempre era o
+// último clique (visto no teste de 14/10: a tela dizia "todas" e o banco guardou uma escondida).
+let filaPerfil = Promise.resolve();
+function gravarPerfil(campo, oQue) {
+  filaPerfil = filaPerfil.then(async () => {
+    const { error } = await sb.from("perfil").update({ [campo]: estado.perfil[campo] }).eq("user_id", estado.sessao.user.id);
+    if (error) alert(`Não consegui salvar ${oQue}: ${error.message}`);
+  });
+}
+
+app.addEventListener("change", e => {
+  const caixa = e.target.closest("input[data-fonte]"); if (!caixa) return;
+  const fonte = caixa.dataset.fonte, anterior = ocultas();
+  const novo = caixa.checked ? anterior.filter(f => f !== fonte) : [...new Set([...anterior, fonte])];
+  estado.perfil = { ...estado.perfil, fontes_ocultas: novo }; telaVagas();   // a tela responde na hora; o perfil grava em seguida
+  document.querySelector(`input[data-fonte="${fonte}"]`)?.focus();
+  gravarPerfil("fontes_ocultas", "as plataformas");
 });
 
 // Setas para cima e para baixo andam pela lista (no computador o detalhe acompanha)

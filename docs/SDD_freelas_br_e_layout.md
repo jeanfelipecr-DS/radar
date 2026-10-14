@@ -146,3 +146,14 @@ celular: mesma ordem em uma coluna; tocar na vaga abre o detalhe por cima, "Volt
 - Semanas em "Todas": bloco Em português (140) e bloco Em inglês e outras línguas (120); por valor, as unidades ficam dentro de cada bloco.
 - Recentes: a primeira linha é de 47 minutos atrás.
 - 0 erros de JavaScript em 1440 px e 390 px; o idioma do Jean voltou para Português, como ele tinha deixado.
+
+## 9. Filtro por plataforma (14/10/2026)
+
+**Pedido:** "tem como filtrar por plataforma também? porque eu não consigo aplicar na Workana ainda" (perfil da Workana em análise, sem poder mandar proposta).
+
+**Desenho (segue o filtro de idioma, sem nova rodada de perguntas):**
+- Botão **Plataformas** na barra ("todas" ou "4 de 5") abre uma lista para marcar e desmarcar, com quantas vagas com encaixe cada uma tem.
+- A escolha fica no perfil (`perfil.fontes_ocultas`, `0007`): vale no celular e no computador. O perfil guarda as **escondidas**, para uma plataforma nova aparecer sozinha.
+- Aba que fica vazia por causa das plataformas escondidas diz isso e oferece "Escolher plataformas".
+
+**Achado no teste:** remarcar três plataformas seguidas mandava três gravações ao mesmo tempo, e o banco guardou uma escondida enquanto a tela dizia "todas". As gravações do perfil (plataformas e idioma) agora saem em fila e levam o valor do momento em que saem. Repetido o teste: desmarcar 3 e recarregar mostra "2 de 5"; remarcar 3 e recarregar mostra "todas"; banco igual à tela; 0 erros de JavaScript.
